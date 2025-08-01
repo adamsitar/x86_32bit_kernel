@@ -1,10 +1,27 @@
+#include "asm/io.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-// #if !defined(__i386__)
-// #error "Needs to be compiled with a ix86-elf compiler"
-// #endif
+/* The I/O ports */
+#define FB_COMMAND_PORT 0x3D4
+#define FB_DATA_PORT 0x3D5
+
+/* The I/O port commands */
+#define FB_HIGH_BYTE_COMMAND 14
+#define FB_LOW_BYTE_COMMAND 15
+
+/** fb_move_cursor:
+ * Moves the cursor of the framebuffer to the given position
+ *
+ * @param pos The new position of the cursor
+ */
+void fb_move_cursor(unsigned short pos) {
+  outb(FB_COMMAND_PORT, FB_HIGH_BYTE_COMMAND);
+  outb(FB_DATA_PORT, ((pos >> 8) & 0x00FF));
+  outb(FB_COMMAND_PORT, FB_LOW_BYTE_COMMAND);
+  outb(FB_DATA_PORT, pos & 0x00FF);
+}
 
 /* Hardware text mode color constants. */
 enum vga_color {
@@ -89,9 +106,11 @@ void terminal_writestring(const char *data) {
 }
 
 void kernel_main(void) {
-  /* Initialize terminal interface */
-  // terminal_initialize();
+  init_gdt();
 
+  /* Initialize terminal interface */
+  terminal_initialize();
   /* Newline support is left as an exercise. */
-  // terminal_writestring("Hello!");
+  terminal_writestring("Hello!");
+  fb_move_cursor(7);
 }

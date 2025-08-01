@@ -1,0 +1,75 @@
+# Makefile for building a bare-metal kernel
+
+# Directories
+SRC_DIR := src
+ASM_DIR := $(SRC_DIR)/asm
+BIN_DIR := bin
+ISO_DIR := $(BIN_DIR)/isodir
+
+# Compilers and tools
+NASM := nasm
+CC := i686-elf-gcc
+LD := ld
+GRUB_MKRESCUE := grub-mkrescue
+QEMU := qemu-system-i386
+
+# Flags
+NASM_FLAGS := -felf32
+CFLAGS := -std=gnu99 -ffreestanding -O2 -Wall -Wextra
+LDFLAGS := -m elf_i386 -T linker.ld
+
+# Source files (using wildcard to automatically find all .asm and .c files)
+# This uses Make's wildcard function to glob files dynamically.
+ASM_SOURCES := $(wildcard $(ASM_DIR)/*.asm)
+C_SOURCES := $(wildcard $(SRC_DIR)/*.c)
+
+# Object files (using patsubst to transform source paths to bin/ paths)
+# patsubst is a substitution function: $(patsubst pattern, replacement, text)
+ASM_OBJECTS := $(patsubst $(ASM_DIR)/%.asm, $(BIN_DIR)/%.o, $(ASM_SOURCES))
+C_OBJECTS := $(patsubst $(SRC_DIR)/%.c, $(BIN_DIR)/%.o, $(C_SOURCES))
+
+# All objects combined
+OBJECTS := $(ASM_OBJECTS) $(C_OBJECTS)
+
+# Default target: build and run the kernel
+all: run
+# Rule to link all objects into bin/os.bin
+# $@ is an automatic variable for the target name.
+# $^ is an automatic variable for all prerequisites (no duplicates).
+$(BIN_DIR)/os.bin: $(OBJECTS) | $(BIN_DIR)
+	$(LD) $(LDFLAGS) -o $@ $^
+
+# Pattern rule for compiling ASM files
+# % is a wildcard in pattern rules; $< is the first prerequisite (source file),
+# $@ is the target (object file).
+$(BIN_DIR)/%.o: $(ASM_DIR)/%.asm | $(BIN_DIR)
+	$(NASM) $(NASM_FLAGS) $< -o $@
+
+# Pattern rule for compiling C files
+$(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Rule to create the ISO
+# This depends on bin/os.bin and grub.cfg (assumed to be in root).
+# We use mkdir -p to create the directory structure if it doesn't exist.
+iso: $(BIN_DIR)/os.bin grub.cfg
+	mkdir -p $(ISO_DIR)/boot/grub
+	cp $(BIN_DIR)/os.bin $(ISO_DIR)/boot/os.bin
+	cp grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
+	$(GRUB_MKRESCUE) -o $(BIN_DIR)/os.iso $(ISO_DIR)
+
+# Rule to run QEMU
+run: iso
+	$(QEMU) -cdrom $(BIN_DIR)/os.iso
+
+# Create bin/ directory if it doesn't exist (order-only prerequisite, using |)
+# Order-only prerequisites (with |) are not checked for timestamps, just ensured to exist.
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+# Clean up build artifacts
+clean:
+	rm -rf $(BIN_DIR)/*
+
+# Phony targets: these are not files, so always run them regardless of timestamps
+.PHONY: all iso run clean
