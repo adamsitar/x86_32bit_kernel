@@ -20,12 +20,12 @@ LDFLAGS := -m elf_i386 -T linker.ld
 
 # Source files (using wildcard to automatically find all .asm and .c files)
 # This uses Make's wildcard function to glob files dynamically.
-ASM_SOURCES := $(wildcard $(ASM_DIR)/*.asm)
+ASM_SOURCES := $(wildcard $(ASM_DIR)/*.nasm)
 C_SOURCES := $(wildcard $(SRC_DIR)/*.c)
 
 # Object files (using patsubst to transform source paths to bin/ paths)
 # patsubst is a substitution function: $(patsubst pattern, replacement, text)
-ASM_OBJECTS := $(patsubst $(ASM_DIR)/%.asm, $(BIN_DIR)/%.o, $(ASM_SOURCES))
+ASM_OBJECTS := $(patsubst $(ASM_DIR)/%.nasm, $(BIN_DIR)/%.o, $(ASM_SOURCES))
 C_OBJECTS := $(patsubst $(SRC_DIR)/%.c, $(BIN_DIR)/%.o, $(C_SOURCES))
 
 # All objects combined
@@ -42,7 +42,7 @@ $(BIN_DIR)/os.bin: $(OBJECTS) | $(BIN_DIR)
 # Pattern rule for compiling ASM files
 # % is a wildcard in pattern rules; $< is the first prerequisite (source file),
 # $@ is the target (object file).
-$(BIN_DIR)/%.o: $(ASM_DIR)/%.asm | $(BIN_DIR)
+$(BIN_DIR)/%.o: $(ASM_DIR)/%.nasm | $(BIN_DIR)
 	$(NASM) $(NASM_FLAGS) $< -o $@
 
 # Pattern rule for compiling C files

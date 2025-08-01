@@ -1,5 +1,8 @@
+// main
 #include <gdt.h>
+#include <interrupt.h>
 #include <io.h>
+// standard
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
