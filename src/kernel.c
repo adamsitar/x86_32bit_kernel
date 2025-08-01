@@ -1,5 +1,5 @@
-#include "asm/gdt.h"
-#include "asm/io.h"
+#include <gdt.h>
+#include <io.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

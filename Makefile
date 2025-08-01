@@ -14,8 +14,8 @@ GRUB_MKRESCUE := grub-mkrescue
 QEMU := qemu-system-i386
 
 # Flags
-NASM_FLAGS := -felf32
-CFLAGS := -std=gnu99 -ffreestanding -O2 -Wall -Wextra
+NASM_FLAGS := -felf32 -I$(ASM_DIR) -I$(SRC_DIR)
+CFLAGS := -std=gnu99 -ffreestanding -O2 -Wall -Wextra -I$(SRC_DIR) -I$(ASM_DIR)
 LDFLAGS := -m elf_i386 -T linker.ld
 
 # Source files (using wildcard to automatically find all .asm and .c files)

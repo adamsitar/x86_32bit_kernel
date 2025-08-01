@@ -1,0 +1,21 @@
+[
+  {
+    "arguments": [
+      "/usr/sbin/i686-elf-gcc",
+      "-std=gnu99",
+      "-ffreestanding",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Isrc",
+      "-Isrc/asm",
+      "-c",
+      "-o",
+      "bin/kernel.o",
+      "src/kernel.c"
+    ],
+    "directory": "/home/adam/os_dev",
+    "file": "/home/adam/os_dev/src/kernel.c",
+    "output": "/home/adam/os_dev/bin/kernel.o"
+  }
+]
