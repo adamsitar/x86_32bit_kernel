@@ -1,60 +1,81 @@
-extern interrupt_handler
-
-%macro no_error_code_interrupt_handler 1
-global interrupt_handler_%1
-interrupt_handler_%1:
-  push dword 0 ; push 0 as error code
-  push dword %1 ; push the interrupt number
-  jmp common_interrupt_handler ; jump to the common handler
-%endmacro
-
-%macro error_code_interrupt_handler 1
-global interrupt_handler_%1
-  interrupt_handler_%1:
-  push dword %1 ; push the interrupt number
-  jmp common_interrupt_handler ; jump to the common handler
-%endmacro
-
-common_interrupt_handler: ; the common parts of the generic interrupt handler
-  ; Save all registers first
-  push eax
-  push ebx
-  push ecx
-  push edx
-  push esi
-  push edi
-  push ebp
+isr_common_stub:
+  pushad                     ; Push all general purpose registers
+  mov ax, ds
+  push eax                   ; Push data segment
   
-  ; NOW calculate what ESP was before we started pushing
-  mov eax, esp
-  add eax, 28        ; 7 pushes × 4 bytes = 28 bytes
-  push eax           ; Push the ORIGINAL ESP value
+  mov ax, 0x10               ; Load kernel data segment
+  mov ds, ax
+  mov es, ax
+  mov fs, ax
+  mov gs, ax
   
-  call interrupt_handler
+  mov eax, esp               ; ESP points to our interrupt frame
+  push eax                   ; Pass pointer to frame
+  call exception_handler
+  add esp, 4                 ; Clean up pointer argument
   
-  add esp, 4         ; Skip the ESP value
-  pop ebp
-  pop edi
-  pop esi
-  pop edx
-  pop ecx
-  pop ebx
-  pop eax
-  ; return to the code that got interrupted
+  pop eax                    ; Restore data segment
+  mov ds, ax
+  mov es, ax
+  mov fs, ax
+  mov gs, ax
+  
+  popad                      ; Restore all general purpose registers
+  add esp, 8                 ; Clean up error code and interrupt number
   iret
 
-no_error_code_interrupt_handler 0 ; create handler for interrupt 0
-no_error_code_interrupt_handler 1 ; create handler for interrupt 1
-; .
-; .
-; .
-error_code_interrupt_handler 7 ; create handler for interrupt 7
+%macro isr_err_stub 1
+isr_stub_%+%1:
+  push %1                    ; Push interrupt number
+  jmp isr_common_stub        ; Jump to common handler
+%endmacro
 
-global load_idt
-; load_idt - Loads the interrupt descriptor table (IDT).
-; stack: [esp + 4] the address of the first entry in the IDT
-; [esp ] the return address
-load_idt:
-  mov eax, [esp+4] ; load the address of the IDT into register eax
-  lidt eax ; load the IDT
-  ret ; return to the calling function
+%macro isr_no_err_stub 1
+isr_stub_%+%1:
+  push 0                     ; Push dummy error code
+  push %1                    ; Push interrupt number  
+  jmp isr_common_stub        ; Jump to common handler
+%endmacro
+
+extern exception_handler
+isr_no_err_stub 0
+isr_no_err_stub 1
+isr_no_err_stub 2
+isr_no_err_stub 3
+isr_no_err_stub 4
+isr_no_err_stub 5
+isr_no_err_stub 6
+isr_no_err_stub 7
+isr_err_stub    8
+isr_no_err_stub 9
+isr_err_stub    10
+isr_err_stub    11
+isr_err_stub    12
+isr_err_stub    13
+isr_err_stub    14
+isr_no_err_stub 15
+isr_no_err_stub 16
+isr_err_stub    17
+isr_no_err_stub 18
+isr_no_err_stub 19
+isr_no_err_stub 20
+isr_no_err_stub 21
+isr_no_err_stub 22
+isr_no_err_stub 23
+isr_no_err_stub 24
+isr_no_err_stub 25
+isr_no_err_stub 26
+isr_no_err_stub 27
+isr_no_err_stub 28
+isr_no_err_stub 29
+isr_err_stub    30
+isr_no_err_stub 31
+
+; Creates an array of function pointers that C code can access
+global isr_stub_table
+isr_stub_table:
+%assign i 0 
+%rep    32 
+    dd isr_stub_%+i ; use DQ instead if targeting 64-bit
+%assign i i+1 
+%endrep
