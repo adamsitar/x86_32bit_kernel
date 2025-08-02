@@ -1,12 +1,15 @@
 #pragma once
+#include <io.h>
 #include <pic.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <terminal.h>
 
-// IDT Register structure - tells the CPU where the IDT is located
+// IDT Register structure - points the CPU to the IDT's base address and size
+// (limit).
 typedef struct {
   uint16_t limit;
-  uint64_t base;
+  uint32_t base;
 } __attribute__((packed)) idtr_t;
 static idtr_t idtr;
 
@@ -47,6 +50,7 @@ static bool vectors[IDT_MAX_DESCRIPTORS];
 
 extern void *isr_stub_table[];
 
+static bool are_interrupts_enabled();
 void idt_init() {
   // Set up IDT register
   idtr.base = (uintptr_t)&idt[0];
@@ -60,10 +64,10 @@ void idt_init() {
 
   // Remap PIC: exceptions use 0-31, so put hardware IRQs at 32-47
   pic_remap(32, 40);
-
-  // Install IRQ handlers (32-47)
+  // Install IRQ handlers (32-47) - table indices 32-47
   for (uint8_t vector = 0; vector < 16; vector++) {
-    idt_set_descriptor(32 + vector, isr_stub_table[vector], 0x8E);
+    idt_set_descriptor(32 + vector, isr_stub_table[32 + vector], 0x8E);
+    vectors[32 + vector] = true; // Optional: Track these too
   }
 
   // Load new IDT
@@ -75,6 +79,12 @@ void idt_init() {
 
   // Enable interrupts via the interrupt flag
   __asm__ volatile("sti");
+
+  if (are_interrupts_enabled()) {
+    printf("interrupts enabled!\n");
+  } else {
+    printf("interrupts disabled!\n");
+  }
 }
 
 // Interrupt frame structure matching the stack layout
@@ -99,9 +109,30 @@ typedef struct {
   // uint32_t user_ss;    // User stack segment
 } __attribute__((packed)) interrupt_frame_t;
 
-__attribute__((noreturn)) void exception_handler(interrupt_frame_t *frame) {
+// __attribute__((noreturn)) void exception_handler(interrupt_frame_t *frame) {
+//   printf("interrupt recieved! %d\n", frame->interrupt_num);
+//   __asm__ volatile("cli; hlt"); // Completely hangs the computer
+// }
 
-  __asm__ volatile("cli; hlt"); // Completely hangs the computer
+// Updated handler
+void exception_handler(interrupt_frame_t *frame) {
+  printf("Interrupt received! Vector: %d\n", frame->interrupt_num);
+
+  if (frame->interrupt_num >= 32 && frame->interrupt_num <= 47) {
+    // This is a hardware IRQ: Acknowledge the PIC
+    pic_acknowledge(frame->interrupt_num);
+
+    // TODO: Add actual IRQ handling here, e.g.:
+    // if (frame->interrupt_num == 32) { /* Handle timer */ }
+    // if (frame->interrupt_num == 33) { /* Handle keyboard */ }
+
+    // For IRQs, we can return normally (iret will resume execution)
+    return;
+  } else {
+    // This is an exception (or software interrupt): Treat as fatal
+    printf("Fatal exception! Error code: %d\n", frame->error_code);
+    __asm__ volatile("cli; hlt"); // Disable interrupts and halt
+  }
 }
 
 static inline bool are_interrupts_enabled() {
@@ -110,4 +141,20 @@ static inline bool are_interrupts_enabled() {
                "pop %0"
                : "=g"(flags));
   return flags & (1 << 9);
+}
+
+// Function to trigger a software interrupt (vector 3) for testing
+void test_software_interrupt(void) {
+  // Inline assembly to trigger 'int 3' (breakpoint exception)
+  __asm__ volatile("int $3" // Triggers vector 3 in the IDT
+  );
+}
+
+// will recieve interrupts from QEMU
+// (IRQ 0 → vector 32) should fire every ~18ms if enabled)
+void test_hardware_interrupt(void) {
+  while (1) {
+    // Infinite loop to keep kernel running and allow interrupts
+    __asm__ volatile("hlt"); // Low-power wait for interrupts
+  }
 }

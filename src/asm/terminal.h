@@ -1,3 +1,4 @@
+#pragma once
 #include <stdarg.h> /* Added for variadic arguments in printf */
 #include <stddef.h>
 #include <stdint.h>
@@ -46,6 +47,7 @@ size_t terminal_column;
 uint8_t terminal_color;
 uint16_t *terminal_buffer = (uint16_t *)VGA_MEMORY;
 
+void print_greeting();
 void terminal_initialize(void) {
   terminal_row = 0;
   terminal_column = 0;
@@ -57,6 +59,7 @@ void terminal_initialize(void) {
       terminal_buffer[index] = vga_entry(' ', terminal_color);
     }
   }
+  print_greeting();
 }
 
 void terminal_setcolor(uint8_t color) { terminal_color = color; }
@@ -244,4 +247,13 @@ void printf(const char *format, ...) {
   }
 
   va_end(parameters);
+}
+
+void print_greeting() {
+  printf(" __           __ __\n"         //
+         "|  |--.-----.|  |  |.-----.\n" //
+         "|     |  -__||  |  ||  _  |\n" //
+         "|__|__|_____||__|__||_____|\n" //
+         "                           \n" //
+  );
 }

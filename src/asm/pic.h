@@ -85,6 +85,33 @@ void pic_disable(void) {
   outb(PIC1_DATA, 0xff);
   outb(PIC2_DATA, 0xff);
 }
+// Remapped interrupt starts (from the book, matches your pic_remap(32, 40))
+#define PIC1_START_INTERRUPT 0x20                     // 32
+#define PIC2_START_INTERRUPT 0x28                     // 40
+#define PIC2_END_INTERRUPT (PIC2_START_INTERRUPT + 7) // 47
+#define PIC_ACK 0x20
+
+/**
+ * pic_acknowledge:
+ * Acknowledges an interrupt from either PIC 1 or PIC 2.
+ * For slave PIC interrupts, sends EOI to both slave and master.
+ *
+ * @param interrupt The interrupt vector number
+ */
+void pic_acknowledge(uint32_t interrupt) {
+  if (interrupt < PIC1_START_INTERRUPT || interrupt > PIC2_END_INTERRUPT) {
+    return; // Not a PIC interrupt, ignore
+  }
+
+  if (interrupt >= PIC2_START_INTERRUPT) {
+    // Slave PIC interrupt: Acknowledge slave first, then master (for cascade)
+    outb(PIC2_COMMAND, PIC_ACK);
+    outb(PIC1_COMMAND, PIC_ACK);
+  } else {
+    // Master PIC interrupt: Acknowledge master only
+    outb(PIC1_COMMAND, PIC_ACK);
+  }
+}
 
 void irq_set_mask(uint8_t IRQline) {
   uint16_t port;

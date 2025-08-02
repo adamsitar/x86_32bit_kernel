@@ -13,11 +13,6 @@ void kernel_main(void) {
   terminal_initialize();
   idt_init();
 
-  printf("hello!\n");
-  // fb_move_cursor(7);
-  if (are_interrupts_enabled()) {
-    printf("interrupts enabled!\n");
-  } else {
-    printf("interrupts disabled!\n");
-  }
+  // test_software_interrupt();
+  // test_hardware_interrupt();
 }
