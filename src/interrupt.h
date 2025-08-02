@@ -1,5 +1,6 @@
 #pragma once
 #include <io.h>
+#include <keyboard.h>
 #include <pic.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -109,16 +110,28 @@ typedef struct {
   // uint32_t user_ss;    // User stack segment
 } __attribute__((packed)) interrupt_frame_t;
 
-// __attribute__((noreturn)) void exception_handler(interrupt_frame_t *frame) {
-//   printf("interrupt recieved! %d\n", frame->interrupt_num);
-//   __asm__ volatile("cli; hlt"); // Completely hangs the computer
-// }
-
 // Updated handler
 void exception_handler(interrupt_frame_t *frame) {
-  printf("Interrupt received! Vector: %d\n", frame->interrupt_num);
+  if (frame->interrupt_num != 32)
+    printf("Interrupt received! Vector: %d\n", frame->interrupt_num);
 
   if (frame->interrupt_num >= 32 && frame->interrupt_num <= 47) {
+
+    if (frame->interrupt_num == 33) { // Keyboard IRQ (remapped IRQ 1)
+      unsigned char scancode = read_scan_code();
+      // Simple logging - expand this to map to ASCII or handle press/release
+      printf("Keyboard scancode: 0x%X (decimal %d)\n", scancode, scancode);
+      if (scancode & 0x80) {
+        printf("Key released (code: 0x%X)\n",
+               scancode & ~0x80); // Strip release bit
+      } else {
+        printf("Key pressed (code: 0x%X)\n", scancode);
+      }
+      // TODO: Add scancode-to-ASCII mapping table here (e.g., for 'A' = 0x1E ->
+      // 'a')
+    }
+    // TODO: Handle other IRQs (e.g., vector 32 for timer)
+
     // This is a hardware IRQ: Acknowledge the PIC
     pic_acknowledge(frame->interrupt_num);
 

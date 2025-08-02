@@ -14,5 +14,5 @@ void kernel_main(void) {
   idt_init();
 
   // test_software_interrupt();
-  // test_hardware_interrupt();
+  test_hardware_interrupt();
 }
