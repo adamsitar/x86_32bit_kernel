@@ -1,4 +1,5 @@
 #pragma once
+#include <io.h>
 #include <stdarg.h> /* Added for variadic arguments in printf */
 #include <stddef.h>
 #include <stdint.h>
@@ -23,6 +24,26 @@ enum vga_color {
   VGA_COLOR_WHITE = 15,
 };
 
+/* The I/O ports */
+#define FB_COMMAND_PORT 0x3D4
+#define FB_DATA_PORT 0x3D5
+
+/* The I/O port commands */
+#define FB_HIGH_BYTE_COMMAND 14
+#define FB_LOW_BYTE_COMMAND 15
+
+/** fb_move_cursor:
+ * Moves the cursor of the framebuffer to the given position
+ *
+ * @param pos The new position of the cursor
+ */
+static inline void move_cursor(unsigned short pos) {
+  outb(FB_COMMAND_PORT, FB_HIGH_BYTE_COMMAND);
+  outb(FB_DATA_PORT, ((pos >> 8) & 0x00FF));
+  outb(FB_COMMAND_PORT, FB_LOW_BYTE_COMMAND);
+  outb(FB_DATA_PORT, pos & 0x00FF);
+}
+
 static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg) {
   return fg | bg << 4;
 }
@@ -31,7 +52,7 @@ static inline uint16_t vga_entry(unsigned char uc, uint8_t color) {
   return (uint16_t)uc | (uint16_t)color << 8;
 }
 
-size_t strlen(const char *str) {
+static inline size_t strlen(const char *str) {
   size_t len = 0;
   while (str[len])
     len++;
@@ -62,16 +83,18 @@ void terminal_initialize(void) {
   print_greeting();
 }
 
-void terminal_setcolor(uint8_t color) { terminal_color = color; }
+static inline void terminal_setcolor(uint8_t color) { terminal_color = color; }
 
-void terminal_putentryat(char c, uint8_t color, size_t x, size_t y) {
+static inline void terminal_putentryat(char c, uint8_t color, size_t x,
+                                       size_t y) {
   const size_t index = y * VGA_WIDTH + x;
+  move_cursor(index);
   terminal_buffer[index] = vga_entry(c, color);
 }
 
 /* Added to implement proper scrolling (shifts lines up and clears the bottom).
  */
-static void terminal_scroll(void) {
+static inline void terminal_scroll(void) {
   for (size_t y = 0; y < VGA_HEIGHT - 1; y++) {
     for (size_t x = 0; x < VGA_WIDTH; x++) {
       const size_t dest_index = y * VGA_WIDTH + x;
@@ -88,7 +111,7 @@ static void terminal_scroll(void) {
 
 /* Modified to handle '\n' specially and trigger scrolling instead of wrapping.
  */
-inline void terminal_putchar(char c) {
+static inline void terminal_putchar(char c) {
   if (c == '\n') {
     terminal_column = 0;
     terminal_row++;
@@ -111,17 +134,17 @@ inline void terminal_putchar(char c) {
   }
 }
 
-void terminal_write(const char *data, size_t size) {
+static inline void terminal_write(const char *data, size_t size) {
   for (size_t i = 0; i < size; i++)
     terminal_putchar(data[i]);
 }
 
-void terminal_writestring(const char *data) {
+static inline void terminal_writestring(const char *data) {
   terminal_write(data, strlen(data));
 }
 
 /* Helper to print a signed integer. */
-static void print_int(int num) {
+static inline void print_int(int num) {
   if (num == 0) {
     terminal_putchar('0');
     return;
@@ -151,7 +174,7 @@ static void print_int(int num) {
 }
 
 /* Helper to print an unsigned integer. */
-static void print_uint(unsigned int num) {
+static inline void print_uint(unsigned int num) {
   if (num == 0) {
     terminal_putchar('0');
     return;
@@ -171,7 +194,7 @@ static void print_uint(unsigned int num) {
 }
 
 /* Helper to print an unsigned integer in lowercase hex (no 0x prefix). */
-static void print_hex(unsigned int num) {
+static inline void print_hex(unsigned int num) {
   if (num == 0) {
     terminal_putchar('0');
     return;

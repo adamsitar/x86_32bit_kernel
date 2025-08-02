@@ -15,7 +15,7 @@ QEMU := qemu-system-i386
 
 # Flags
 NASM_FLAGS := -felf32 -I$(ASM_DIR) -I$(SRC_DIR)
-CFLAGS := -std=gnu99 -ffreestanding -O2 -Wall -Wextra -I$(SRC_DIR) -I$(ASM_DIR)
+CFLAGS := -std=gnu99 -ffreestanding -g -Wall -Wextra -I$(SRC_DIR) -I$(ASM_DIR)
 LDFLAGS := -m elf_i386 -T linker.ld
 
 # Source files (using wildcard to automatically find all .asm and .c files)
@@ -37,6 +37,7 @@ all: run
 # $@ is an automatic variable for the target name.
 # $^ is an automatic variable for all prerequisites (no duplicates).
 $(BIN_DIR)/os.bin: $(OBJECTS) | $(BIN_DIR)
+	echo $(OBJECTS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
 # Pattern rule for compiling ASM files

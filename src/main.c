@@ -1,4 +1,5 @@
 // main
+#include <exception_handler.h>
 #include <gdt.h>
 #include <interrupt.h>
 #include <io.h>

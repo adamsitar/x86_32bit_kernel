@@ -1,3 +1,4 @@
+#pragma once
 #include <stdint.h>
 
 /**
@@ -77,7 +78,7 @@ void init_gdt(void) {
   // Set up the GDT pointer
   struct gdt_ptr gp;
   gp.limit = sizeof(gdt) - 1; // Limit is size of GDT minus 1
-  gp.base = (uint64_t)&gdt;   // Base address of the GDT array
+  gp.base = (uint32_t)&gdt;   // Base address of the GDT array
 
   // Load the GDT
   load_gdt(&gp);

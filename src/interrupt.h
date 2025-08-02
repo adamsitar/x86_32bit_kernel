@@ -48,10 +48,54 @@ void idt_set_descriptor(uint8_t vector, void *isr, uint8_t flags) {
 
 #define IDT_MAX_DESCRIPTORS 256
 static bool vectors[IDT_MAX_DESCRIPTORS];
-
 extern void *isr_stub_table[];
 
-static bool are_interrupts_enabled();
+void idt_init();
+
+// Interrupt frame structure matching the stack layout
+typedef struct {
+  // Segment register (pushed by our assembly)
+  uint32_t ds;
+  // General purpose registers (pushed by pushad in reverse order)
+  uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+  // Our data (pushed by our assembly)
+  uint32_t interrupt_num;
+  uint32_t error_code;
+  // CPU-pushed data (pushed automatically during interrupt)
+  uint32_t eip;    // Instruction pointer where interrupt occurred
+  uint32_t cs;     // Code segment
+  uint32_t eflags; // CPU flags register
+  // Only present if interrupt occurred while in user mode (different privilege)
+  // uint32_t user_esp;   // User stack pointer
+  // uint32_t user_ss;    // User stack segment
+} __attribute__((packed)) interrupt_frame_t;
+
+static inline bool are_interrupts_enabled() {
+  unsigned long flags;
+  asm volatile("pushf\n\t"
+               "pop %0"
+               : "=g"(flags));
+  return flags & (1 << 9);
+}
+
+// Function to trigger a software interrupt (vector 3) for testing
+void test_software_interrupt(void) {
+  // Inline assembly to trigger 'int 3' (breakpoint exception)
+  __asm__ volatile("int $3" // Triggers vector 3 in the IDT
+  );
+}
+
+// will recieve interrupts from QEMU
+// (IRQ 0 → vector 32) should fire every ~18ms if enabled)
+void test_hardware_interrupt(void) {
+  while (1) {
+    // Infinite loop to keep kernel running and allow interrupts
+    __asm__ volatile("hlt"); // Low-power wait for interrupts
+  }
+}
+
+void exception_handler(interrupt_frame_t *frame);
+
 void idt_init() {
   // Set up IDT register
   idtr.base = (uintptr_t)&idt[0];
@@ -85,89 +129,5 @@ void idt_init() {
     printf("interrupts enabled!\n");
   } else {
     printf("interrupts disabled!\n");
-  }
-}
-
-// Interrupt frame structure matching the stack layout
-typedef struct {
-  // Segment register (pushed by our assembly)
-  uint32_t ds;
-
-  // General purpose registers (pushed by pushad in reverse order)
-  uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
-
-  // Our data (pushed by our assembly)
-  uint32_t interrupt_num;
-  uint32_t error_code;
-
-  // CPU-pushed data (pushed automatically during interrupt)
-  uint32_t eip;    // Instruction pointer where interrupt occurred
-  uint32_t cs;     // Code segment
-  uint32_t eflags; // CPU flags register
-
-  // Only present if interrupt occurred while in user mode (different privilege)
-  // uint32_t user_esp;   // User stack pointer
-  // uint32_t user_ss;    // User stack segment
-} __attribute__((packed)) interrupt_frame_t;
-
-// Updated handler
-void exception_handler(interrupt_frame_t *frame) {
-  if (frame->interrupt_num != 32)
-    printf("Interrupt received! Vector: %d\n", frame->interrupt_num);
-
-  if (frame->interrupt_num >= 32 && frame->interrupt_num <= 47) {
-
-    if (frame->interrupt_num == 33) { // Keyboard IRQ (remapped IRQ 1)
-      unsigned char scancode = read_scan_code();
-      // Simple logging - expand this to map to ASCII or handle press/release
-      printf("Keyboard scancode: 0x%X (decimal %d)\n", scancode, scancode);
-      if (scancode & 0x80) {
-        printf("Key released (code: 0x%X)\n",
-               scancode & ~0x80); // Strip release bit
-      } else {
-        printf("Key pressed (code: 0x%X)\n", scancode);
-      }
-      // TODO: Add scancode-to-ASCII mapping table here (e.g., for 'A' = 0x1E ->
-      // 'a')
-    }
-    // TODO: Handle other IRQs (e.g., vector 32 for timer)
-
-    // This is a hardware IRQ: Acknowledge the PIC
-    pic_acknowledge(frame->interrupt_num);
-
-    // TODO: Add actual IRQ handling here, e.g.:
-    // if (frame->interrupt_num == 32) { /* Handle timer */ }
-    // if (frame->interrupt_num == 33) { /* Handle keyboard */ }
-
-    // For IRQs, we can return normally (iret will resume execution)
-    return;
-  } else {
-    // This is an exception (or software interrupt): Treat as fatal
-    printf("Fatal exception! Error code: %d\n", frame->error_code);
-    __asm__ volatile("cli; hlt"); // Disable interrupts and halt
-  }
-}
-
-static inline bool are_interrupts_enabled() {
-  unsigned long flags;
-  asm volatile("pushf\n\t"
-               "pop %0"
-               : "=g"(flags));
-  return flags & (1 << 9);
-}
-
-// Function to trigger a software interrupt (vector 3) for testing
-void test_software_interrupt(void) {
-  // Inline assembly to trigger 'int 3' (breakpoint exception)
-  __asm__ volatile("int $3" // Triggers vector 3 in the IDT
-  );
-}
-
-// will recieve interrupts from QEMU
-// (IRQ 0 → vector 32) should fire every ~18ms if enabled)
-void test_hardware_interrupt(void) {
-  while (1) {
-    // Infinite loop to keep kernel running and allow interrupts
-    __asm__ volatile("hlt"); // Low-power wait for interrupts
   }
 }
