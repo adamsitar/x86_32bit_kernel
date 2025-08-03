@@ -25,3 +25,10 @@ static inline uint8_t inb(uint16_t port) {
 }
 
 static inline void io_wait(void) { outb(0x80, 0); }
+
+#define HIGH_ADDR 0xC0000000
+
+// converts virtual to physical address
+static inline uint32_t v_to_p(uint32_t addr) { return addr - HIGH_ADDR; }
+static inline uint32_t p_to_v(uint32_t addr) { return addr + HIGH_ADDR; }
+static inline uint32_t to_mb(uint32_t num) { return num >> 20; }

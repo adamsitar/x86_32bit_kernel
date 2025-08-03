@@ -24,10 +24,36 @@ void halt() {
   } // Infinite loop to ensure we never proceed
 }
 
+void clear_identity_mapping() {
+  extern uint32_t page_directory[1024];
+  extern uint32_t page_table_kernel[1024];
+
+  // Step 1: Clear PDE 0 (identity mapping).
+  // page_directory is at high virtual address.
+  page_directory[0] = 0; // Set to 0 (not present, no flags).
+
+  // Step 2: Invalidate TLB.
+  // Option A: Full TLB flush by reloading CR3 (simple).
+  unsigned int cr3_val;
+  asm volatile("mov %%cr3, %0" : "=r"(cr3_val));  // Read CR3
+  asm volatile("mov %0, %%cr3" : : "r"(cr3_val)); // Write back to flush TLB.
+}
+
+void test_identity_clear() {
+  // (Optional) Step 3: Verify - this should cause a page fault.
+  volatile unsigned int *test = (unsigned int *)0x00000000;
+  *test = 0xDEADBEEF; // Will fault if identity mapping is removed.
+}
+
 void kernel_main(multiboot_info_t *mbi) {
-  init_gdt();
+  // init_gdt();
   terminal_initialize();
   idt_init();
+  printf("Hello!");
+  clear_identity_mapping();
+  printf("After clear!");
+  // test_identity_clear();
+  // printf("VGA_MEMORY: %u\n", to_mb(VGA_MEMORY));
 
   // Step 1: Check if module info is available (flags bit 3 must be set)
   if (!(mbi->flags & (1 << 3))) {
@@ -51,14 +77,13 @@ void kernel_main(multiboot_info_t *mbi) {
   call_module_t start_program = (call_module_t)mod->mod_start;
 
   // Step 5: Call (jump to) the module's code
-  start_program();
+  // start_program();
 
   // If we get here, the module returned control to us (which might not be
   // intended)
   // Handle it by halting or continuing kernel execution
-
   halt();
 
   // test_software_interrupt();
-  test_hardware_interrupt();
+  // test_hardware_interrupt();
 }

@@ -25,8 +25,8 @@ enum vga_color {
 };
 
 /* The I/O ports */
-#define FB_COMMAND_PORT 0x3D4
-#define FB_DATA_PORT 0x3D5
+#define FB_COMMAND_PORT p_to_v(0x3D4)
+#define FB_DATA_PORT p_to_v(0x3D5)
 
 /* The I/O port commands */
 #define FB_HIGH_BYTE_COMMAND 14
@@ -61,12 +61,14 @@ static inline size_t strlen(const char *str) {
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
-#define VGA_MEMORY 0xB8000
+// #define VGA_MEMORY 0xB8000
+#define VGA_MEMORY 0x000B8000
 
 size_t terminal_row;
 size_t terminal_column;
 uint8_t terminal_color;
-uint16_t *terminal_buffer = (uint16_t *)VGA_MEMORY;
+// this does prevent from raising an exception
+uint32_t *terminal_buffer = (uint32_t *)(VGA_MEMORY + 0xC0000000);
 
 void print_greeting();
 void terminal_initialize(void) {
