@@ -73,7 +73,7 @@ iso: $(BIN_DIR)/os.bin grub.cfg $(PROGRAM_BINS)
 
 # Rule to run QEMU
 run: iso
-	$(QEMU) -cdrom $(BIN_DIR)/os.iso -d int -s -S
+	$(QEMU) -cdrom $(BIN_DIR)/os.iso -d int -s -S -no-shutdown -no-reboot -monitor stdio
 	# $(QEMU) -cdrom $(BIN_DIR)/os.iso
 
 # Create bin/ directory if it doesn't exist (order-only prerequisite, using |)
