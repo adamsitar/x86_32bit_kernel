@@ -5,6 +5,8 @@ SRC_DIR := src
 ASM_DIR := $(SRC_DIR)/asm
 BIN_DIR := bin
 ISO_DIR := $(BIN_DIR)/isodir
+PROGRAM_DIR := $(ASM_DIR)/programs
+PROGRAM_BIN_DIR := $(BIN_DIR)/programs
 
 # Compilers and tools
 NASM := nasm
@@ -23,6 +25,11 @@ LDFLAGS := -m elf_i386 -T linker.ld
 ASM_SOURCES := $(wildcard $(ASM_DIR)/*.nasm)
 C_SOURCES := $(wildcard $(SRC_DIR)/*.c)
 
+# Find all program source files
+PROGRAM_SOURCES := $(wildcard $(PROGRAM_DIR)/*.nasm)
+# Convert to .bin targets
+PROGRAM_BINS := $(patsubst $(PROGRAM_DIR)/%.nasm,$(BIN_DIR)/programs/%.bin,$(PROGRAM_SOURCES))
+
 # Object files (using patsubst to transform source paths to bin/ paths)
 # patsubst is a substitution function: $(patsubst pattern, replacement, text)
 ASM_OBJECTS := $(patsubst $(ASM_DIR)/%.nasm, $(BIN_DIR)/%.o, $(ASM_SOURCES))
@@ -31,8 +38,8 @@ C_OBJECTS := $(patsubst $(SRC_DIR)/%.c, $(BIN_DIR)/%.o, $(C_SOURCES))
 # All objects combined
 OBJECTS := $(ASM_OBJECTS) $(C_OBJECTS)
 
-# Default target: build and run the kernel
-all: run
+all: clean run
+
 # Rule to link all objects into bin/os.bin
 # $@ is an automatic variable for the target name.
 # $^ is an automatic variable for all prerequisites (no duplicates).
@@ -46,6 +53,9 @@ $(BIN_DIR)/os.bin: $(OBJECTS) | $(BIN_DIR)
 $(BIN_DIR)/%.o: $(ASM_DIR)/%.nasm | $(BIN_DIR)
 	$(NASM) $(NASM_FLAGS) $< -o $@
 
+$(PROGRAM_BIN_DIR)/%.bin: $(PROGRAM_DIR)/%.nasm | $(PROGRAM_BIN_DIR)
+	$(NASM) -f bin $< -o $@
+
 # Pattern rule for compiling C files
 $(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -53,20 +63,25 @@ $(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
 # Rule to create the ISO
 # This depends on bin/os.bin and grub.cfg (assumed to be in root).
 # We use mkdir -p to create the directory structure if it doesn't exist.
-iso: $(BIN_DIR)/os.bin grub.cfg
+iso: $(BIN_DIR)/os.bin grub.cfg $(PROGRAM_BINS)
 	mkdir -p $(ISO_DIR)/boot/grub
+	mkdir -p $(ISO_DIR)/modules
 	cp $(BIN_DIR)/os.bin $(ISO_DIR)/boot/os.bin
+	cp $(PROGRAM_BIN_DIR)/program.bin $(ISO_DIR)/modules/program.bin
 	cp grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	$(GRUB_MKRESCUE) -o $(BIN_DIR)/os.iso $(ISO_DIR)
 
 # Rule to run QEMU
 run: iso
-	$(QEMU) -cdrom $(BIN_DIR)/os.iso -d int
+	$(QEMU) -cdrom $(BIN_DIR)/os.iso -d int -s -S
 
 # Create bin/ directory if it doesn't exist (order-only prerequisite, using |)
 # Order-only prerequisites (with |) are not checked for timestamps, just ensured to exist.
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
+
+$(PROGRAM_BIN_DIR): 
+	mkdir -p $(PROGRAM_BIN_DIR)
 
 # Clean up build artifacts
 clean:
