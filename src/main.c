@@ -46,45 +46,42 @@ void test_identity_clear() {
 }
 
 void kernel_main(multiboot_info_t *mbi) {
-  // init_gdt();
+  init_gdt();
   terminal_initialize();
   idt_init();
-  printf("Hello!");
-  clear_identity_mapping();
-  printf("After clear!");
+  printf("Hello!\n");
 
-  // test_identity_clear();
-  // printf("VGA_MEMORY: %u\n", to_mb(VGA_MEMORY));
+  // test_software_interrupt();
 
   // Step 1: Check if module info is available (flags bit 3 must be set)
-  // if (!(mbi->flags & (1 << 3))) {
-  // No modules loaded? Handle the error (e.g., halt or log)
-  // For now, we'll just halt
-  // halt();
-  // }
+  if (!(mbi->flags & (1 << 3))) {
+    // No modules loaded? Handle the error (e.g., halt or log)
+    // For now, we'll just halt
+    halt();
+  }
 
+  printf("module count: %u\n", mbi->mods_count);
   // Step 2: Check if at least one module was loaded
-  // if (mbi->mods_count == 0) {
-  //   // No modules? Halt or handle error
-  //   halt();
-  // }
+  if (mbi->mods_count == 0) {
+    // No modules? Halt or handle error
+    halt();
+  }
 
   // Step 3: Get the address of the first module's structure
   // mods_addr points to an array of multiboot_module_t structs
-  // multiboot_module_t *mod = (multiboot_module_t *)mbi->mods_addr;
+  multiboot_module_t *mod = (multiboot_module_t *)mbi->mods_addr;
 
   // Step 4: Cast the module's start address to a callable function pointer
   // This assumes the module's code begins at mod->mod_start and is executable
-  // call_module_t start_program = (call_module_t)mod->mod_start;
+  call_module_t start_program = (call_module_t)mod->mod_start;
 
   // Step 5: Call (jump to) the module's code
-  // start_program();
+  start_program();
 
   // If we get here, the module returned control to us (which might not be
   // intended)
   // Handle it by halting or continuing kernel execution
   // halt();
 
-  // test_software_interrupt();
   test_hardware_interrupt();
 }

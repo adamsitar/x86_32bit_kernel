@@ -120,7 +120,7 @@ void idt_init() {
 
   // Enable specific IRQs we want
   irq_clear_mask(1); // Enable keyboard (IRQ 1)
-  irq_clear_mask(0); // Enable timer (IRQ 0)
+  // irq_clear_mask(0); // Enable timer (IRQ 0)
 
   // Enable interrupts via the interrupt flag
   __asm__ volatile("sti");

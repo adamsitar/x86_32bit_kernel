@@ -24,6 +24,11 @@ enum vga_color {
   VGA_COLOR_WHITE = 15,
 };
 
+#define VGA_WIDTH 80
+#define VGA_HEIGHT 25
+// #define VGA_MEMORY 0xB8000
+#define VGA_MEMORY 0x000B8000
+
 /* The I/O ports */
 #define FB_COMMAND_PORT p_to_v(0x3D4)
 #define FB_DATA_PORT p_to_v(0x3D5)
@@ -37,7 +42,8 @@ enum vga_color {
  *
  * @param pos The new position of the cursor
  */
-static inline void move_cursor(unsigned short pos) {
+static inline void move_cursor(uint8_t x, uint8_t y) {
+  const size_t pos = y * VGA_WIDTH + x;
   outb(FB_COMMAND_PORT, FB_HIGH_BYTE_COMMAND);
   outb(FB_DATA_PORT, ((pos >> 8) & 0x00FF));
   outb(FB_COMMAND_PORT, FB_LOW_BYTE_COMMAND);
@@ -58,11 +64,6 @@ static inline size_t strlen(const char *str) {
     len++;
   return len;
 }
-
-#define VGA_WIDTH 80
-#define VGA_HEIGHT 25
-// #define VGA_MEMORY 0xB8000
-#define VGA_MEMORY 0x000B8000
 
 size_t terminal_row;
 size_t terminal_column;
@@ -91,7 +92,7 @@ static inline void terminal_setcolor(uint8_t color) { terminal_color = color; }
 static inline void terminal_putentryat(char c, uint8_t color, size_t x,
                                        size_t y) {
   const size_t index = y * VGA_WIDTH + x;
-  move_cursor(index);
+  move_cursor(x, y);
   terminal_buffer[index] = vga_entry(c, color);
 }
 
@@ -118,6 +119,7 @@ static inline void terminal_putchar(char c) {
   if (c == '\n') {
     terminal_column = 0;
     terminal_row++;
+    move_cursor(terminal_column, terminal_row);
     if (terminal_row == VGA_HEIGHT) {
       terminal_scroll();
       terminal_row = VGA_HEIGHT - 1;
@@ -216,6 +218,29 @@ static inline void print_hex(unsigned int num) {
     terminal_putchar(buf[j]);
   }
 }
+/* Helper to print a pointer as 0x followed by lowercase hex. */
+static inline void print_pointer(void *ptr) {
+  terminal_writestring("0x");
+
+  uintptr_t num = (uintptr_t)ptr;
+  if (num == 0) {
+    terminal_putchar('0');
+    return;
+  }
+
+  char buf[32];
+  size_t idx = 0;
+  while (num > 0) {
+    uintptr_t digit = num % 16;
+    buf[idx++] = (digit < 10) ? '0' + digit : 'a' + (digit - 10);
+    num /= 16;
+  }
+
+  /* Reverse and print. */
+  for (int j = idx - 1; j >= 0; j--) {
+    terminal_putchar(buf[j]);
+  }
+}
 
 /* Basic printf supporting %c, %s, %d/%i, %u, %x, %%. Handles \n via
  * terminal_putchar. */
@@ -257,6 +282,11 @@ void printf(const char *format, ...) {
         print_hex(num);
         break;
       }
+      case 'p': {
+        void *ptr = va_arg(parameters, void *);
+        print_pointer(ptr);
+        break;
+      }
       case '%': {
         terminal_putchar('%');
         break;
@@ -280,6 +310,5 @@ void print_greeting() {
          "|  |--.-----.|  |  |.-----.\n" //
          "|     |  -__||  |  ||  _  |\n" //
          "|__|__|_____||__|__||_____|\n" //
-         "                           \n" //
   );
 }

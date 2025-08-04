@@ -74,10 +74,10 @@ iso: $(BIN_DIR)/os.bin grub.cfg $(PROGRAM_BINS)
 
 # Rule to run QEMU
 run: iso
-	# $(QEMU) -cdrom $(BIN_DIR)/os.iso -d int -s -S -no-shutdown -no-reboot
-	# $(QEMU) -cdrom $(BIN_DIR)/os.iso
+	# $(QEMU) $(QEMU_FLAGS) -cdrom $(BIN_DIR)/os.iso -s -S
+	$(QEMU) $(QEMU_FLAGS) -cdrom $(BIN_DIR)/os.iso
 	#
-	$(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin -s -S
+	# $(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin -s -S
 	# $(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin 
 	
 
