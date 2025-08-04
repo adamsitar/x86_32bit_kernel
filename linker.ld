@@ -11,56 +11,57 @@ ENTRY(_start)
    kernel image. */
 SECTIONS
 {
-
+  /* linkers location counter sets the VMA - this is what symbols resolve to*/
   . = 0x00100000;
   kernel_physical_start = .;
-  /* bootstrap section for low-linked boot code (VMA = LMA = 0x00100000). */
+
+  /* If you omit AT(), the LMA defaults to the current .  */
+  /* AT expression explicitly sets the LMA, it does not affect the VMA */
+  /* the VMA is controlled separately by the . location counter */
+  /* Low-linked bootstrap section (VMA = LMA = 0x00100000). */
 	.bootstrap ALIGN(4K) : AT(ADDR(.bootstrap))
 	{
 		*(.multiboot)
 		*(.bootstrap)
 	}
 
+  /* Low-linked BSS for paging structures (accessible physically). */
+  .bootstrap_bss ALIGN(4K) : AT(ADDR(.bootstrap_bss))
+  {
+    *(.bootstrap_bss)
+  }
 
-	/* MOD: Compute size and physical end of bootstrap to avoid LMA overlap with later sections. */
-	bootstrap_size = SIZEOF(.bootstrap);
-	bootstrap_physical_end = kernel_physical_start + bootstrap_size;
+  /* Compute physical end after bootstrap + its BSS. */
+  kernel_physical_end = .;
+  /* Set kernel virtual start to 0xC0100000 (standard; maps to phys 0x100000 via page table). */
+  . = 0xC0000000 + kernel_physical_end;
+  kernel_virtual_start = .;
 
-	/* MOD: Set kernel VMA to 0xC0000000 + bootstrap_physical_end (e.g., 0xC0100100 if bootstrap=0x100 bytes).
-	   This ensures paging maps virtual addresses correctly to the shifted physical addresses. */
-	. = 0xC0000000 + bootstrap_physical_end;
-	kernel_virtual_start = .;
-
-	/* MOD: Added AT() to specify physical load address (LMA) at 0x00100000. */
-  /* .text now after bootstrap, with low LMA via AT(). */
-	.text ALIGN(4K) : AT(ADDR(.text) - 0xC0000000)
+  /* Higher-half sections with physical LMAs computed from VMAs. */
+	.text ALIGN(4K) : AT(kernel_physical_end + (ADDR(.text) - kernel_virtual_start))
 	{
 		*(.text)
 	}
 
 	/* MOD: Added AT(ADDR(...) - 0xC0000000) to compute physical LMA based on virtual VMA. */
-	.rodata ALIGN(4K) : AT(ADDR(.rodata) - 0xC0000000)
+	.rodata ALIGN(4K) : AT(kernel_physical_end + (ADDR(.rodata) - kernel_virtual_start))
 	{
 		*(.rodata)
 	}
 
 	/* MOD: Added AT(ADDR(...) - 0xC0000000) to compute physical LMA based on virtual VMA. */
-	.data ALIGN(4K) : AT(ADDR(.data) - 0xC0000000)
+	.data ALIGN(4K) : AT(kernel_physical_end + (ADDR(.data) - kernel_virtual_start))
 	{
 		*(.data)
 	}
 
 	/* MOD: Added AT(ADDR(...) - 0xC0000000) to compute physical LMA based on virtual VMA. */
-	.bss ALIGN(4K) : AT(ADDR(.bss) - 0xC0000000)
+	.bss ALIGN(4K) : AT(kernel_physical_end + (ADDR(.bss) - kernel_virtual_start))
 	{
 		*(COMMON)
 		*(.bss)
 	}
 
-	/* The compiler may produce other sections, by default it will put them in
-	   a segment with the same name. Simply add stuff here as needed. */
-
 	/* MOD: Added symbols for kernel end (useful for later memory management). */
 	kernel_virtual_end = .;
-	kernel_physical_end = . - 0xC0000000;
 }

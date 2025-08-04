@@ -19,6 +19,7 @@ QEMU := qemu-system-i386
 NASM_FLAGS := -felf32 -I$(ASM_DIR) -I$(SRC_DIR)
 CFLAGS := -std=gnu99 -ffreestanding -g -Wall -Wextra -I$(SRC_DIR) -I$(ASM_DIR)
 LDFLAGS := -m elf_i386 -T linker.ld
+QEMU_FLAGS := -no-reboot -no-shutdown -d int,guest_errors,invalid_mem
 
 # Source files (using wildcard to automatically find all .asm and .c files)
 # This uses Make's wildcard function to glob files dynamically.
@@ -74,9 +75,10 @@ iso: $(BIN_DIR)/os.bin grub.cfg $(PROGRAM_BINS)
 # Rule to run QEMU
 run: iso
 	# $(QEMU) -cdrom $(BIN_DIR)/os.iso -d int -s -S -no-shutdown -no-reboot
-	# $(QEMU) -kernel $(BIN_DIR)/os.bin -d int -s -S -no-shutdown -no-reboot
-	$(QEMU) -kernel $(BIN_DIR)/os.bin
 	# $(QEMU) -cdrom $(BIN_DIR)/os.iso
+	#
+	$(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin -s -S
+	# $(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin 
 	
 
 # Create bin/ directory if it doesn't exist (order-only prerequisite, using |)
