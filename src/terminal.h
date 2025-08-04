@@ -68,7 +68,8 @@ size_t terminal_row;
 size_t terminal_column;
 uint8_t terminal_color;
 // this does prevent from raising an exception
-uint32_t *terminal_buffer = (uint32_t *)(VGA_MEMORY + 0xC0000000);
+// must be 16 bits as the VGA has 2 byte cells
+uint16_t *terminal_buffer = (uint16_t *)(VGA_MEMORY + 0xC0000000);
 
 void print_greeting();
 void terminal_initialize(void) {
