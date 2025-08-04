@@ -45,14 +45,7 @@ void test_identity_clear() {
   *test = 0xDEADBEEF; // Will fault if identity mapping is removed.
 }
 
-void kernel_main(multiboot_info_t *mbi) {
-  init_gdt();
-  terminal_initialize();
-  idt_init();
-  printf("Hello!\n");
-
-  // test_software_interrupt();
-
+void start_module(multiboot_info_t *mbi) {
   // Step 1: Check if module info is available (flags bit 3 must be set)
   if (!(mbi->flags & (1 << 3))) {
     // No modules loaded? Handle the error (e.g., halt or log)
@@ -77,11 +70,16 @@ void kernel_main(multiboot_info_t *mbi) {
 
   // Step 5: Call (jump to) the module's code
   start_program();
+}
 
-  // If we get here, the module returned control to us (which might not be
-  // intended)
-  // Handle it by halting or continuing kernel execution
-  // halt();
+void kernel_main(multiboot_info_t *mbi) {
+  init_gdt();
+  terminal_initialize();
+  idt_init();
+  printf("Hello!\n");
 
+  // test_software_interrupt();
+
+  // start_module(mbi);
   test_hardware_interrupt();
 }
