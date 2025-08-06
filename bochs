@@ -1,0 +1,7 @@
+display_library: sdl2
+romimage: file=/usr/share/bochs/BIOS-bochs-latest
+vgaromimage: file=/usr/share/bochs/VGABIOS-lgpl-latest
+ata0-slave: type=cdrom, path=bin/os.iso, status=inserted
+boot:cdrom
+log: bochslog.txt
+display_library: x, options = "gui_debug"

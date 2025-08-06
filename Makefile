@@ -74,12 +74,12 @@ iso: $(BIN_DIR)/os.bin grub.cfg $(PROGRAM_BINS)
 
 # Rule to run QEMU
 run: iso
-	# $(QEMU) $(QEMU_FLAGS) -cdrom $(BIN_DIR)/os.iso -s -S
 	$(QEMU) $(QEMU_FLAGS) -cdrom $(BIN_DIR)/os.iso
-	#
-	# $(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin -s -S
 	# $(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin 
 	
+debug: iso
+	$(QEMU) $(QEMU_FLAGS) -cdrom $(BIN_DIR)/os.iso -s -S
+	# $(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin -s -S
 
 # Create bin/ directory if it doesn't exist (order-only prerequisite, using |)
 # Order-only prerequisites (with |) are not checked for timestamps, just ensured to exist.

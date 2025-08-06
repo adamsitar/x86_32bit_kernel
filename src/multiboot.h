@@ -18,7 +18,6 @@ typedef struct multiboot_elf_section_header_table {
 } multiboot_elf_section_header_table_t;
 
 // Main Multiboot information structure.
-// This is the struct pointed to by EBX when the kernel is loaded.
 // Check the 'flags' bitfield to see which parts are valid.
 typedef struct multiboot_info {
   // Mandatory - always present
@@ -95,9 +94,16 @@ typedef struct multiboot_module {
 
 // Memory map entry structure (each entry in the buffer at mmap_addr)
 typedef struct multiboot_mmap_entry {
-  uint32_t size; // Size of this structure (minus this field)
-  uint64_t addr; // Base address of memory region
-  uint64_t len;  // Length of memory region
+  uint32_t size;        // Size of this structure (minus this field)
+  uint32_t addr_low;    // Base address of memory region
+  uint32_t addr_high;   // Base address of memory region
+  uint32_t length_low;  // Length of memory region
+  uint32_t length_high; // Length of memory region
+#define MULTIBOOT_MEMORY_AVAILABLE 1
+#define MULTIBOOT_MEMORY_RESERVED 2
+#define MULTIBOOT_MEMORY_ACPI_RECLAIMABLE 3
+#define MULTIBOOT_MEMORY_NVS 4
+#define MULTIBOOT_MEMORY_BADRAM 5
   uint32_t type; // Type: 1=available RAM, 2=reserved, 3=ACPI reclaimable,
                  // 4=ACPI NVS, 5=bad
 } __attribute__((

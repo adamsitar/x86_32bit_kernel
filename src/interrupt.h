@@ -5,25 +5,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <terminal.h>
+#include <util.h>
 
-// IDT Register structure - points the CPU to the IDT's base address and size
-// (limit).
-typedef struct {
-  uint16_t limit;
-  uint32_t base;
-} __attribute__((packed)) idtr_t;
-static idtr_t idtr;
+#define IDT_MAX_DESCRIPTORS 256
 
 // 32-bit IDT entry - each interrupt vector has one of these
 typedef struct {
-  uint16_t isr_low;   // Bits 0-15 of handler address
-  uint16_t kernel_cs; // GDT selector (usually 0x08 for kernel code)
-  uint8_t reserved;   // Must be 0
-  uint8_t attributes; // Gate type, DPL, present bit
-  uint16_t isr_high;  // Bits 16-31 of handler address
+  uint16_t isr_low;  // Bits 0-15 of handler address
+  uint16_t selector; // GDT selector (usually 0x08 for kernel code)
+  uint8_t reserved;  // Must be 0
+  uint8_t flags;     // Gate type, DPL, present bit
+  uint16_t isr_high; // Bits 16-31 of handler address
 } __attribute__((packed)) idt_entry_t;
 
-// attributes breakdown:
+// flags breakdown:
 // Bit 7: Present (P) - must be 1 for valid entries
 // Bit 6-5: Descriptor Privilege Level (DPL) - 0 for kernel, 3 for user
 // Bit 4: Storage Segment (S) - must be 0 for interrupt gates
@@ -32,25 +27,10 @@ typedef struct {
 //   - 0xE = Interrupt Gate (32-bit)
 //   - 0xF = Trap Gate (32-bit)
 
-idt_entry_t idt[256] = {};
-
-// populates an IDT entry with the address of an interrupt handler
-void idt_set_descriptor(uint8_t vector, void *isr, uint8_t flags) {
-  idt_entry_t *descriptor = &idt[vector];
-
-  descriptor->isr_low = (uint32_t)isr & 0xFFFF;
-  descriptor->kernel_cs = 0x08; // this value can be whatever offset your kernel
-                                // code selector is in your GDT
-  descriptor->attributes = flags;
-  descriptor->isr_high = (uint32_t)isr >> 16;
-  descriptor->reserved = 0;
-}
-
-#define IDT_MAX_DESCRIPTORS 256
-static bool vectors[IDT_MAX_DESCRIPTORS];
-extern void *isr_stub_table[];
-
-void idt_init();
+typedef struct {
+  uint16_t limit;
+  uint32_t base;
+} __attribute__((packed)) idt_ptr_t;
 
 // Interrupt frame structure matching the stack layout
 typedef struct {
@@ -70,6 +50,23 @@ typedef struct {
   // uint32_t user_ss;    // User stack segment
 } __attribute__((packed)) interrupt_frame_t;
 
+idt_entry_t idt_entries[256];
+idt_ptr_t idt_ptr;
+bool vectors[IDT_MAX_DESCRIPTORS];
+extern void *isr_stub_table[];
+
+// populates an IDT entry with the address of an interrupt handler
+void idt_set_descriptor(uint8_t vector, void *isr, uint8_t flags) {
+  idt_entry_t *descriptor = &idt_entries[vector];
+
+  descriptor->isr_low = (uint32_t)isr & 0xFFFF;
+  descriptor->selector = 0x08; // this value can be whatever offset your kernel
+                               // code selector is in your GDT
+  descriptor->flags = flags;
+  descriptor->isr_high = (uint32_t)isr >> 16;
+  descriptor->reserved = 0;
+}
+
 static inline bool are_interrupts_enabled() {
   unsigned long flags;
   asm volatile("pushf\n\t"
@@ -78,28 +75,17 @@ static inline bool are_interrupts_enabled() {
   return flags & (1 << 9);
 }
 
-// Function to trigger a software interrupt (vector 3) for testing
-void test_software_interrupt(void) {
-  // Inline assembly to trigger 'int 3' (breakpoint exception)
-  __asm__ volatile("int $3" // Triggers vector 3 in the IDT
-  );
-}
+extern void init_idt();
+extern void exception_handler(interrupt_frame_t *frame);
 
-// will recieve interrupts from QEMU
-// (IRQ 0 → vector 32) should fire every ~18ms if enabled)
-void test_hardware_interrupt(void) {
-  while (1) {
-    // Infinite loop to keep kernel running and allow interrupts
-    __asm__ volatile("hlt"); // Low-power wait for interrupts
-  }
-}
-
-void exception_handler(interrupt_frame_t *frame);
-
-void idt_init() {
+void init_idt() {
   // Set up IDT register
-  idtr.base = (uintptr_t)&idt[0];
-  idtr.limit = (uint16_t)sizeof(idt_entry_t) * IDT_MAX_DESCRIPTORS - 1;
+  idt_ptr.base = (uintptr_t)&idt_entries[0];
+  idt_ptr.limit = sizeof(idt_entry_t) * IDT_MAX_DESCRIPTORS - 1;
+  memset(&idt_entries, 0, sizeof(idt_entry_t) * IDT_MAX_DESCRIPTORS);
+
+  // Remap PIC: exceptions use 0-31, so put hardware IRQs at 32-47
+  pic_remap(32, 40); // 0x20, 0x28
 
   // Install exception handlers (0-31)
   for (uint8_t vector = 0; vector < 32; vector++) {
@@ -107,8 +93,6 @@ void idt_init() {
     vectors[vector] = true;
   }
 
-  // Remap PIC: exceptions use 0-31, so put hardware IRQs at 32-47
-  pic_remap(32, 40);
   // Install IRQ handlers (32-47) - table indices 32-47
   for (uint8_t vector = 0; vector < 16; vector++) {
     idt_set_descriptor(32 + vector, isr_stub_table[32 + vector], 0x8E);
@@ -116,7 +100,7 @@ void idt_init() {
   }
 
   // Load new IDT
-  __asm__ volatile("lidt %0" : : "m"(idtr));
+  __asm__ volatile("lidt %0" : : "m"(idt_ptr));
 
   // Enable specific IRQs we want
   irq_clear_mask(1); // Enable keyboard (IRQ 1)
@@ -129,5 +113,15 @@ void idt_init() {
     printf("interrupts enabled!\n");
   } else {
     printf("interrupts disabled!\n");
+  }
+}
+
+void test_software_interrupt(void) {
+  __asm__ volatile("int $3"); // Triggers vector 3 in the IDT
+}
+
+void test_hardware_interrupt(void) {
+  while (1) {
+    __asm__ volatile("hlt"); // Low-power wait for interrupts
   }
 }

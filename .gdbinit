@@ -1,5 +1,6 @@
 file bin/os.bin
 set architecture i386
+set disassembly-flavor intel
 set breakpoint pending on
 
 # Define a hook to run after 'target remote' connects

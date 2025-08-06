@@ -4,6 +4,7 @@
 #include <interrupt.h>
 #include <io.h>
 #include <multiboot.h>
+#include <pfa.h>
 #include <terminal.h>
 // standard
 #include <stdbool.h>
@@ -72,14 +73,15 @@ void start_module(multiboot_info_t *mbi) {
   start_program();
 }
 
-void kernel_main(multiboot_info_t *mbi) {
+void kernel_main(uint32_t magic, multiboot_info_t *boot_info) {
+  init_terminal();
   init_gdt();
-  terminal_initialize();
-  idt_init();
-  printf("Hello!\n");
+  init_idt();
+
+  init_pfa(boot_info); // Call our initializer
+  printf("after pfa init");
 
   // test_software_interrupt();
-
   // start_module(mbi);
   test_hardware_interrupt();
 }
