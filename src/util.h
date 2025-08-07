@@ -8,4 +8,8 @@ void memset(void *destination, char value, uint32_t num_bytes) {
   }
 }
 
+void invalidate(uint32_t virtual_address) {
+  asm volatile("invlpg %0" ::"m"(virtual_address));
+}
+
 #define CEIL_DIV(a, b) (((a + b) - 1) / b)

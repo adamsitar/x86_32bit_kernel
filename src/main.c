@@ -77,9 +77,8 @@ void kernel_main(uint32_t magic, multiboot_info_t *boot_info) {
   init_terminal();
   init_gdt();
   init_idt();
-
   init_pfa(boot_info); // Call our initializer
-  printf("after pfa init");
+  alloc_new_pt(769);
 
   // test_software_interrupt();
   // start_module(mbi);
