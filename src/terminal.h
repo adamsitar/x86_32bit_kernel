@@ -1,314 +1,299 @@
 #pragma once
+#include "printf.h"
 #include <io.h>
-#include <stdarg.h> /* Added for variadic arguments in printf */
+#include <stdarg.h>
+#include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
+#include <util.h>
+#include <vga.h>
 
-/* Hardware text mode color constants. */
-enum vga_color {
-  VGA_COLOR_BLACK = 0,
-  VGA_COLOR_BLUE = 1,
-  VGA_COLOR_GREEN = 2,
-  VGA_COLOR_CYAN = 3,
-  VGA_COLOR_RED = 4,
-  VGA_COLOR_MAGENTA = 5,
-  VGA_COLOR_BROWN = 6,
-  VGA_COLOR_LIGHT_GREY = 7,
-  VGA_COLOR_DARK_GREY = 8,
-  VGA_COLOR_LIGHT_BLUE = 9,
-  VGA_COLOR_LIGHT_GREEN = 10,
-  VGA_COLOR_LIGHT_CYAN = 11,
-  VGA_COLOR_LIGHT_RED = 12,
-  VGA_COLOR_LIGHT_MAGENTA = 13,
-  VGA_COLOR_LIGHT_BROWN = 14,
-  VGA_COLOR_WHITE = 15,
-};
+// Scrollback buffer configuration
+#define SCROLLBACK_LINES 100 // Number of lines to keep in history
+#define SCROLLBACK_SIZE (SCROLLBACK_LINES * VGA_WIDTH)
 
-#define VGA_WIDTH 80
-#define VGA_HEIGHT 25
-// #define VGA_MEMORY 0xB8000
-#define VGA_MEMORY 0x000B8000
+typedef struct {
+  // Current display state
+  uint16_t *framebuffer;
+  size_t cursor_x;
+  size_t cursor_y;
+  uint8_t color;
 
-/* The I/O ports */
-#define FB_COMMAND_PORT p_to_v(0x3D4)
-#define FB_DATA_PORT p_to_v(0x3D5)
+  // Scrollback buffer
+  uint16_t *scrollback_buffer;
+  size_t scrollback_head;  // Index of oldest line in circular buffer
+  size_t scrollback_count; // Number of lines currently in scrollback
+  size_t view_offset;      // Current viewing offset (0 = bottom/newest)
 
-/* The I/O port commands */
-#define FB_HIGH_BYTE_COMMAND 14
-#define FB_LOW_BYTE_COMMAND 15
+  // State flags
+  bool cursor_visible;
+  bool in_scrollback_mode;
+} terminal_t;
 
-/** fb_move_cursor:
- * Moves the cursor of the framebuffer to the given position
- *
- * @param pos The new position of the cursor
- */
-static inline void move_cursor(uint8_t x, uint8_t y) {
-  const size_t pos = y * VGA_WIDTH + x;
-  outb(FB_COMMAND_PORT, FB_HIGH_BYTE_COMMAND);
-  outb(FB_DATA_PORT, ((pos >> 8) & 0x00FF));
-  outb(FB_COMMAND_PORT, FB_LOW_BYTE_COMMAND);
-  outb(FB_DATA_PORT, pos & 0x00FF);
-}
+// Global terminal instance
+static terminal_t term;
 
-static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg) {
-  return fg | bg << 4;
-}
+// Static helper functions
+static void update_hardware_cursor(void);
+static void scroll_display(void);
+static void save_line_to_scrollback(size_t line_num);
+static void refresh_from_scrollback(void);
 
-static inline uint16_t vga_entry(unsigned char uc, uint8_t color) {
-  return (uint16_t)uc | (uint16_t)color << 8;
-}
+void terminal_clear(void);
 
-static inline size_t strlen(const char *str) {
-  size_t len = 0;
-  while (str[len])
-    len++;
-  return len;
-}
+void terminal_init(void) {
+  // Initialize framebuffer
+  term.framebuffer = (uint16_t *)VGA_MEMORY;
+  term.cursor_x = 0;
+  term.cursor_y = 0;
+  term.color = vga_make_color(VGA_LIGHT_GREY, VGA_BLACK);
+  term.cursor_visible = true;
+  term.in_scrollback_mode = false;
 
-size_t terminal_row;
-size_t terminal_column;
-uint8_t terminal_color;
-// this does prevent from raising an exception
-// must be 16 bits as the VGA has 2 byte cells
-uint16_t *terminal_buffer = (uint16_t *)(VGA_MEMORY + 0xC0000000);
+  // Allocate scrollback buffer (you'll need to implement kmalloc)
+  // For now, we'll use a static buffer
+  static uint16_t scrollback_storage[SCROLLBACK_SIZE];
+  term.scrollback_buffer = scrollback_storage;
+  term.scrollback_head = 0;
+  term.scrollback_count = 0;
+  term.view_offset = 0;
 
-void print_greeting();
-void init_terminal(void) {
-  terminal_row = 0;
-  terminal_column = 0;
-  terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-
-  for (size_t y = 0; y < VGA_HEIGHT; y++) {
-    for (size_t x = 0; x < VGA_WIDTH; x++) {
-      const size_t index = y * VGA_WIDTH + x;
-      terminal_buffer[index] = vga_entry(' ', terminal_color);
-    }
-  }
+  // Clear the screen
+  terminal_clear();
+  update_hardware_cursor();
   print_greeting();
 }
 
-static inline void terminal_setcolor(uint8_t color) { terminal_color = color; }
-
-static inline void terminal_putentryat(char c, uint8_t color, size_t x,
-                                       size_t y) {
-  const size_t index = y * VGA_WIDTH + x;
-  move_cursor(x, y);
-  terminal_buffer[index] = vga_entry(c, color);
+void terminal_clear(void) {
+  for (size_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
+    term.framebuffer[i] = vga_make_entry(' ', term.color);
+  }
+  term.cursor_x = 0;
+  term.cursor_y = 0;
+  update_hardware_cursor();
 }
 
-/* Added to implement proper scrolling (shifts lines up and clears the bottom).
- */
-static inline void terminal_scroll(void) {
+static void update_hardware_cursor(void) {
+  if (!term.cursor_visible || term.in_scrollback_mode) {
+    // Hide cursor by moving it off-screen
+    uint16_t pos = VGA_WIDTH * VGA_HEIGHT;
+    outb(VGA_CTRL_PORT, VGA_CURSOR_HIGH);
+    outb(VGA_DATA_PORT, (pos >> 8) & 0xFF);
+    outb(VGA_CTRL_PORT, VGA_CURSOR_LOW);
+    outb(VGA_DATA_PORT, pos & 0xFF);
+  } else {
+    uint16_t pos = term.cursor_y * VGA_WIDTH + term.cursor_x;
+    outb(VGA_CTRL_PORT, VGA_CURSOR_HIGH);
+    outb(VGA_DATA_PORT, (pos >> 8) & 0xFF);
+    outb(VGA_CTRL_PORT, VGA_CURSOR_LOW);
+    outb(VGA_DATA_PORT, pos & 0xFF);
+  }
+}
+
+static void save_line_to_scrollback(size_t line_num) {
+  if (line_num >= VGA_HEIGHT)
+    return;
+
+  // Calculate position in circular buffer
+  size_t buffer_line =
+      (term.scrollback_head + term.scrollback_count) % SCROLLBACK_LINES;
+
+  // Copy line to scrollback buffer
+  uint16_t *src = &term.framebuffer[line_num * VGA_WIDTH];
+  uint16_t *dst = &term.scrollback_buffer[buffer_line * VGA_WIDTH];
+  memcpy(dst, src, VGA_WIDTH * sizeof(uint16_t));
+
+  // Update scrollback metadata
+  if (term.scrollback_count < SCROLLBACK_LINES) {
+    term.scrollback_count++;
+  } else {
+    term.scrollback_head = (term.scrollback_head + 1) % SCROLLBACK_LINES;
+  }
+}
+
+static void scroll_display(void) {
+  // Save the top line to scrollback before scrolling
+  save_line_to_scrollback(0);
+
+  // Shift all lines up by one
   for (size_t y = 0; y < VGA_HEIGHT - 1; y++) {
-    for (size_t x = 0; x < VGA_WIDTH; x++) {
-      const size_t dest_index = y * VGA_WIDTH + x;
-      const size_t src_index = (y + 1) * VGA_WIDTH + x;
-      terminal_buffer[dest_index] = terminal_buffer[src_index];
-    }
+    memcpy(&term.framebuffer[y * VGA_WIDTH],
+           &term.framebuffer[(y + 1) * VGA_WIDTH],
+           VGA_WIDTH * sizeof(uint16_t));
   }
-  /* Clear the last row. */
+
+  // Clear the last line
   for (size_t x = 0; x < VGA_WIDTH; x++) {
-    const size_t index = (VGA_HEIGHT - 1) * VGA_WIDTH + x;
-    terminal_buffer[index] = vga_entry(' ', terminal_color);
+    term.framebuffer[(VGA_HEIGHT - 1) * VGA_WIDTH + x] =
+        vga_make_entry(' ', term.color);
   }
 }
 
-/* Modified to handle '\n' specially and trigger scrolling instead of wrapping.
- */
-static inline void terminal_putchar(char c) {
-  if (c == '\n') {
-    terminal_column = 0;
-    terminal_row++;
-    move_cursor(terminal_column, terminal_row);
-    if (terminal_row == VGA_HEIGHT) {
-      terminal_scroll();
-      terminal_row = VGA_HEIGHT - 1;
-    }
-    return;
+void terminal_scrollbottom(void);
+void terminal_putchar(char c) {
+  // Exit scrollback mode when new output arrives
+  if (term.in_scrollback_mode) {
+    terminal_scrollbottom();
   }
 
-  terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
-  terminal_column++;
-  if (terminal_column == VGA_WIDTH) {
-    terminal_column = 0;
-    terminal_row++;
-    if (terminal_row == VGA_HEIGHT) {
-      terminal_scroll();
-      terminal_row = VGA_HEIGHT - 1;
+  switch (c) {
+  case '\n':
+    term.cursor_x = 0;
+    term.cursor_y++;
+    break;
+
+  case '\r':
+    term.cursor_x = 0;
+    break;
+
+  case '\t':
+    term.cursor_x = (term.cursor_x + 8) & ~7;
+    break;
+
+  case '\b':
+    if (term.cursor_x > 0) {
+      term.cursor_x--;
+      term.framebuffer[term.cursor_y * VGA_WIDTH + term.cursor_x] =
+          vga_make_entry(' ', term.color);
     }
+    break;
+
+  default:
+    if (c >= 32 && c < 127) { // Printable ASCII
+      term.framebuffer[term.cursor_y * VGA_WIDTH + term.cursor_x] =
+          vga_make_entry(c, term.color);
+      term.cursor_x++;
+    }
+    break;
   }
+
+  // Handle line wrap
+  if (term.cursor_x >= VGA_WIDTH) {
+    term.cursor_x = 0;
+    term.cursor_y++;
+  }
+
+  // Handle screen scroll
+  if (term.cursor_y >= VGA_HEIGHT) {
+    scroll_display();
+    term.cursor_y = VGA_HEIGHT - 1;
+  }
+
+  update_hardware_cursor();
 }
 
-static inline void terminal_write(const char *data, size_t size) {
-  for (size_t i = 0; i < size; i++)
+void terminal_write(const char *data, size_t size) {
+  for (size_t i = 0; i < size; i++) {
     terminal_putchar(data[i]);
-}
-
-static inline void terminal_writestring(const char *data) {
-  terminal_write(data, strlen(data));
-}
-
-/* Helper to print a signed integer. */
-static inline void print_int(int num) {
-  if (num == 0) {
-    terminal_putchar('0');
-    return;
-  }
-
-  int is_negative = 0;
-  if (num < 0) {
-    is_negative = 1;
-    num = -num; /* Note: Overflow not handled for INT_MIN. */
-  }
-
-  char buf[32];
-  size_t idx = 0;
-  while (num > 0) {
-    buf[idx++] = '0' + (num % 10);
-    num /= 10;
-  }
-
-  if (is_negative) {
-    terminal_putchar('-');
-  }
-
-  /* Reverse and print. */
-  for (int j = idx - 1; j >= 0; j--) {
-    terminal_putchar(buf[j]);
   }
 }
 
-/* Helper to print an unsigned integer. */
-static inline void print_uint(unsigned int num) {
-  if (num == 0) {
-    terminal_putchar('0');
-    return;
-  }
-
-  char buf[32];
-  size_t idx = 0;
-  while (num > 0) {
-    buf[idx++] = '0' + (num % 10);
-    num /= 10;
-  }
-
-  /* Reverse and print. */
-  for (int j = idx - 1; j >= 0; j--) {
-    terminal_putchar(buf[j]);
+void terminal_writestring(const char *str) {
+  while (*str) {
+    terminal_putchar(*str++);
   }
 }
 
-/* Helper to print an unsigned integer in lowercase hex (no 0x prefix). */
-static inline void print_hex(unsigned int num) {
-  if (num == 0) {
-    terminal_putchar('0');
-    return;
-  }
-
-  char buf[32];
-  size_t idx = 0;
-  while (num > 0) {
-    unsigned int digit = num % 16;
-    buf[idx++] = (digit < 10) ? '0' + digit : 'a' + (digit - 10);
-    num /= 16;
-  }
-
-  /* Reverse and print. */
-  for (int j = idx - 1; j >= 0; j--) {
-    terminal_putchar(buf[j]);
-  }
-}
-/* Helper to print a pointer as 0x followed by lowercase hex. */
-static inline void print_pointer(void *ptr) {
-  terminal_writestring("0x");
-
-  uintptr_t num = (uintptr_t)ptr;
-  if (num == 0) {
-    terminal_putchar('0');
-    return;
-  }
-
-  char buf[32];
-  size_t idx = 0;
-  while (num > 0) {
-    uintptr_t digit = num % 16;
-    buf[idx++] = (digit < 10) ? '0' + digit : 'a' + (digit - 10);
-    num /= 16;
-  }
-
-  /* Reverse and print. */
-  for (int j = idx - 1; j >= 0; j--) {
-    terminal_putchar(buf[j]);
-  }
+void terminal_setcolor(vga_color_t fg, vga_color_t bg) {
+  term.color = vga_make_color(fg, bg);
 }
 
-/* Basic printf supporting %c, %s, %d/%i, %u, %x, %%. Handles \n via
- * terminal_putchar. */
-void printf(const char *format, ...) {
-  va_list parameters;
-  va_start(parameters, format);
+static void refresh_from_scrollback(void) {
+  // Clear screen first
+  for (size_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
+    term.framebuffer[i] = vga_make_entry(' ', term.color);
+  }
 
-  size_t i = 0;
-  while (format[i] != '\0') {
-    if (format[i] != '%') {
-      terminal_putchar(format[i]);
+  // Determine which lines to display
+  size_t lines_to_show = VGA_HEIGHT;
+  size_t start_line = 0;
+
+  if (term.scrollback_count > 0) {
+    // Calculate starting position based on view_offset
+    if (term.view_offset < VGA_HEIGHT) {
+      // Showing some current screen content
+      lines_to_show = VGA_HEIGHT - term.view_offset;
+      start_line = term.scrollback_count - lines_to_show;
     } else {
-      /* Skip the '%'. */
-      i++;
-      switch (format[i]) {
-      case 'c': {
-        char c = (char)va_arg(parameters, int); /* char promoted to int. */
-        terminal_putchar(c);
-        break;
-      }
-      case 's': {
-        const char *str = va_arg(parameters, const char *);
-        terminal_writestring(str);
-        break;
-      }
-      case 'd':
-      case 'i': {
-        int num = va_arg(parameters, int);
-        print_int(num);
-        break;
-      }
-      case 'u': {
-        unsigned int num = va_arg(parameters, unsigned int);
-        print_uint(num);
-        break;
-      }
-      case 'x': {
-        unsigned int num = va_arg(parameters, unsigned int);
-        print_hex(num);
-        break;
-      }
-      case 'p': {
-        void *ptr = va_arg(parameters, void *);
-        print_pointer(ptr);
-        break;
-      }
-      case '%': {
-        terminal_putchar('%');
-        break;
-      }
-      default: {
-        /* Unknown specifier: print '%' and the char. */
-        terminal_putchar('%');
-        terminal_putchar(format[i]);
-        break;
-      }
-      }
+      // Showing only scrollback content
+      start_line = term.scrollback_count - term.view_offset;
+      lines_to_show = VGA_HEIGHT;
     }
-    i++;
-  }
 
-  va_end(parameters);
+    // Copy lines from scrollback to display
+    for (size_t i = 0; i < lines_to_show && i < term.scrollback_count; i++) {
+      size_t scrollback_line =
+          (term.scrollback_head + start_line + i) % SCROLLBACK_LINES;
+      memcpy(&term.framebuffer[i * VGA_WIDTH],
+             &term.scrollback_buffer[scrollback_line * VGA_WIDTH],
+             VGA_WIDTH * sizeof(uint16_t));
+    }
+  }
 }
 
-void print_greeting() {
-  printf(" __           __ __\n"         //
-         "|  |--.-----.|  |  |.-----.\n" //
-         "|     |  -__||  |  ||  _  |\n" //
-         "|__|__|_____||__|__||_____|\n" //
-  );
+void terminal_scrollup(size_t lines) {
+  size_t max_offset = term.scrollback_count;
+
+  term.view_offset += lines;
+  if (term.view_offset > max_offset) {
+    term.view_offset = max_offset;
+  }
+
+  term.in_scrollback_mode = (term.view_offset > 0);
+  refresh_from_scrollback();
+  update_hardware_cursor();
+}
+
+void terminal_scrolldown(size_t lines) {
+  if (term.view_offset >= lines) {
+    term.view_offset -= lines;
+  } else {
+    term.view_offset = 0;
+  }
+
+  term.in_scrollback_mode = (term.view_offset > 0);
+  if (!term.in_scrollback_mode) {
+    // Restore current screen content
+    terminal_clear(); // You'd want to restore the actual current content here
+  } else {
+    refresh_from_scrollback();
+  }
+  update_hardware_cursor();
+}
+
+void terminal_scrolltop(void) {
+  term.view_offset = term.scrollback_count;
+  term.in_scrollback_mode = true;
+  refresh_from_scrollback();
+  update_hardware_cursor();
+}
+
+void terminal_scrollbottom(void) {
+  term.view_offset = 0;
+  term.in_scrollback_mode = false;
+  // Restore current screen content
+  terminal_clear(); // You'd want to restore the actual current content here
+  update_hardware_cursor();
+}
+
+bool terminal_in_scrollback(void) { return term.in_scrollback_mode; }
+
+// Additional utility functions
+void terminal_setcursor(size_t x, size_t y) {
+  if (x < VGA_WIDTH && y < VGA_HEIGHT) {
+    term.cursor_x = x;
+    term.cursor_y = y;
+    update_hardware_cursor();
+  }
+}
+
+void terminal_getcursor(size_t *x, size_t *y) {
+  if (x)
+    *x = term.cursor_x;
+  if (y)
+    *y = term.cursor_y;
+}
+
+void terminal_showcursor(bool show) {
+  term.cursor_visible = show;
+  update_hardware_cursor();
 }

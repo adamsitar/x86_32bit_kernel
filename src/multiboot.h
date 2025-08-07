@@ -107,4 +107,4 @@ typedef struct multiboot_mmap_entry {
   uint32_t type; // Type: 1=available RAM, 2=reserved, 3=ACPI reclaimable,
                  // 4=ACPI NVS, 5=bad
 } __attribute__((
-    packed)) multiboot_mmap_entry_t; // Packed to avoid alignment issues
+    packed)) multiboot_memory_map_t; // Packed to avoid alignment issues

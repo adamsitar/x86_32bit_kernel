@@ -15,7 +15,7 @@ align 4
   dd 0,0,0,0,0 ; read from the ELF so here is 0
   dd 0 ; near graphic mode
   dd 800 ; width
-  dd 600 ; height
+  dd 1000 ; height
   dd 32 ;depth
 
 ; Paging structures in low-linked BSS (accessible physically before paging)
