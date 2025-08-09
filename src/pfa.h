@@ -60,7 +60,7 @@ static void pfa_mark_usable_memory(multiboot_info_t *mbi) {
         uint32_t start_frame = base / PAGE_SIZE;
         uint32_t num_frames = length / PAGE_SIZE;
 
-        bitmap_mark_range_free(vm_bitmap, start_frame, num_frames);
+        bitmap_mark_range_free(&vm_bitmap, start_frame, num_frames);
         usable_regions++;
 
         printf("  - Marked free: frames %u-%u (0x%x-0x%x)\n", start_frame,
@@ -93,22 +93,22 @@ static void pfa_reserve_system_areas(void) {
 
   // 3. Reserve EBDA (typically at 0x9FC00 or 0x80000)
   // Usually already marked as reserved in memory map, but be explicit
-  uint32_t ebda_frame = 0x9F000 / PAGE_SIZE;         // Typical EBDA location
-  bitmap_mark_range_used(vm_bitmap, ebda_frame, 16); // Reserve 64KB to be safe
+  uint32_t ebda_frame = 0x9F000 / PAGE_SIZE;          // Typical EBDA location
+  bitmap_mark_range_used(&vm_bitmap, ebda_frame, 16); // Reserve 64KB to be safe
   if (PRINT_MEMORY_MAP)
     printf("  - Reserved: Extended BIOS Data Area\n");
 
   // 4. Reserve VGA memory (0xA0000-0xBFFFF)
   uint32_t vga_start = 0xA0000 / PAGE_SIZE;
   uint32_t vga_frames = 0x20000 / PAGE_SIZE; // 128KB
-  bitmap_mark_range_used(vm_bitmap, vga_start, vga_frames);
+  bitmap_mark_range_used(&vm_bitmap, vga_start, vga_frames);
   if (PRINT_MEMORY_MAP)
     printf("  - Reserved: VGA memory (0xA0000-0xBFFFF)\n");
 
   // 5. Reserve ROM area (0xC0000-0xFFFFF)
   uint32_t rom_start = 0xC0000 / PAGE_SIZE;
   uint32_t rom_frames = 0x40000 / PAGE_SIZE; // 256KB
-  bitmap_mark_range_used(vm_bitmap, rom_start, rom_frames);
+  bitmap_mark_range_used(&vm_bitmap, rom_start, rom_frames);
   if (PRINT_MEMORY_MAP)
     printf("  - Reserved: BIOS ROM area (0xC0000-0xFFFFF)\n");
 }
@@ -126,7 +126,7 @@ static void pfa_reserve_kernel_memory(void) {
   uint32_t end_frame = (reserved_end + PAGE_SIZE - 1) / PAGE_SIZE;
   uint32_t num_frames = end_frame - start_frame;
 
-  bitmap_mark_range_used(vm_bitmap, start_frame, num_frames);
+  bitmap_mark_range_used(&vm_bitmap, start_frame, num_frames);
 
   printf("PFA: Reserved kernel memory:\n");
   printf("  - Physical: 0x%x-0x%x\n", kernel_start, reserved_end);
@@ -146,7 +146,7 @@ static void pfa_reserve_multiboot_structures(multiboot_info_t *mbi) {
   if (mbi->flags & MULTIBOOT_INFO_MEM_MAP) {
     uint32_t mmap_start_frame = mbi->mmap_addr / PAGE_SIZE;
     uint32_t mmap_pages = (mbi->mmap_length + PAGE_SIZE - 1) / PAGE_SIZE;
-    bitmap_mark_range_used(vm_bitmap, mmap_start_frame, mmap_pages);
+    bitmap_mark_range_used(&vm_bitmap, mmap_start_frame, mmap_pages);
   }
 
   // 3. Reserve modules if any
@@ -155,7 +155,7 @@ static void pfa_reserve_multiboot_structures(multiboot_info_t *mbi) {
     for (uint32_t i = 0; i < mbi->mods_count; i++) {
       uint32_t mod_start_frame = mod[i].mod_start / PAGE_SIZE;
       uint32_t mod_end_frame = (mod[i].mod_end + PAGE_SIZE - 1) / PAGE_SIZE;
-      bitmap_mark_range_used(vm_bitmap, mod_start_frame,
+      bitmap_mark_range_used(&vm_bitmap, mod_start_frame,
                              mod_end_frame - mod_start_frame);
       printf("  - Reserved module %u: frames %u-%u\n", i, mod_start_frame,
              mod_end_frame - 1);

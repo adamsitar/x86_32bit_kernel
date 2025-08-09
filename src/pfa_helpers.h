@@ -123,10 +123,9 @@ uint32_t get_max_usable_pages(multiboot_info_t *mbi) {
   find_usable_memory_bounds(mbi, &max_usable_addr, &total_usable_kb);
 
   // Store global values
-  // max_phys_addr = max_usable_addr;
   vm_bitmap.max_phys_addr = max_usable_addr;
   vm_bitmap.total_frames = vm_bitmap.max_phys_addr / PAGE_SIZE;
-  // vm_bitmap.vm_bitmap.total_frames =
+
   // Print summary
   if (PRINT_MEMORY_MAP) {
     printf("=== Memory Summary ===\n");
