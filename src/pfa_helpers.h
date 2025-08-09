@@ -1,15 +1,18 @@
 #pragma once
+#include "bitmap.h"
 #include "multiboot_gnu.h"
 #include <printf.h>
 #include <stdint.h>
 
 #define PAGE_SIZE 4096
 
-extern uint8_t *pfa_bitmap;
-extern uint32_t bitmap_size;
-extern uint32_t total_frames;
-extern uint32_t free_frames;
-extern uintptr_t max_phys_addr;
+// extern uint8_t *vm_bitmap.bitmap;
+// extern uint32_t vm_bitmap.bitmap_size;
+// extern uint32_t vm_bitmap.vm_bitmap.total_frames;
+// extern uint32_t free_frames;
+// extern uintptr_t max_phys_addr;
+
+extern vm_bitmap_t vm_bitmap;
 
 // Get human-readable memory type string
 static const char *get_memory_type_string(uint32_t type) {
@@ -90,6 +93,7 @@ static void find_usable_memory_bounds(multiboot_info_t *mbi,
   *out_total_usable_kb = total_usable_kb;
 }
 
+#define PRINT_MEMORY_MAP false
 // Parse and display memory map
 uint32_t get_max_usable_pages(multiboot_info_t *mbi) {
   if (!(mbi->flags & MULTIBOOT_INFO_MEM_MAP)) {
@@ -97,14 +101,16 @@ uint32_t get_max_usable_pages(multiboot_info_t *mbi) {
     return 0;
   }
 
-  printf("=== Memory Map ===\n");
+  if (PRINT_MEMORY_MAP)
+    printf("=== Memory Map ===\n");
 
   // First pass: Display all regions
   multiboot_memory_map_t *mmap = (multiboot_memory_map_t *)mbi->mmap_addr;
   uintptr_t mmap_end = mbi->mmap_addr + mbi->mmap_length;
 
   while ((uintptr_t)mmap < mmap_end) {
-    print_memory_region(mmap);
+    if (PRINT_MEMORY_MAP)
+      print_memory_region(mmap);
 
     // Move to next entry
     mmap = (multiboot_memory_map_t *)((uintptr_t)mmap + mmap->size +
@@ -117,16 +123,19 @@ uint32_t get_max_usable_pages(multiboot_info_t *mbi) {
   find_usable_memory_bounds(mbi, &max_usable_addr, &total_usable_kb);
 
   // Store global values
-  max_phys_addr = max_usable_addr;
-  total_frames = max_phys_addr / PAGE_SIZE;
-
+  // max_phys_addr = max_usable_addr;
+  vm_bitmap.max_phys_addr = max_usable_addr;
+  vm_bitmap.total_frames = vm_bitmap.max_phys_addr / PAGE_SIZE;
+  // vm_bitmap.vm_bitmap.total_frames =
   // Print summary
-  printf("=== Memory Summary ===\n");
-  printf("Highest usable address: 0x%x\n", max_phys_addr);
-  printf("Total usable memory: %u KB (%u MB)\n", total_usable_kb,
-         total_usable_kb / 1024);
-  printf("Total page frames: %u\n", total_frames);
-  printf("Bitmap size needed: %u bytes\n", (total_frames + 7) / 8);
+  if (PRINT_MEMORY_MAP) {
+    printf("=== Memory Summary ===\n");
+    printf("Highest usable address: 0x%x\n", vm_bitmap.max_phys_addr);
+    printf("Total usable memory: %u KB (%u MB)\n", total_usable_kb,
+           total_usable_kb / 1024);
+    printf("Total page frames: %u\n", vm_bitmap.total_frames);
+    printf("Bitmap size needed: %u bytes\n", (vm_bitmap.total_frames + 7) / 8);
+  }
 
-  return total_frames;
+  return vm_bitmap.total_frames;
 }

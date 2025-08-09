@@ -1,4 +1,5 @@
 #pragma once
+#include <bitmap.h>
 #include <multiboot_gnu.h>
 #include <pfa_helpers.h>
 #include <printf.h>
@@ -8,6 +9,7 @@
 #define PAGE_SIZE 4096
 #define TEMP_MAP_ADDR                                                          \
   0xC03FF000 // As per book: Last entry in kernel's first PT (PDE 768, PTE 1023)
+// #define TEMP_MAP_ADDR_BITSHIFT (768 << 22) | (1023 << 12) | 0x000
 #define BITS_PER_BYTE 8
 
 // Access boot.nasm structures
@@ -20,51 +22,20 @@ extern char kernel_physical_start[];
 extern char kernel_physical_end[];
 extern uintptr_t physical_bitmap;
 
-uint8_t *pfa_bitmap = NULL; // Each bit represents one 4KB frame
-uint32_t bitmap_size = 0;   // In bytes
-uint32_t total_frames = 0;
-uint32_t free_frames = 0;
-uintptr_t max_phys_addr = 0; // Highest usable physical addr
+vm_bitmap_t vm_bitmap = {NULL, 0, 0, 0, 0};
 
-// Helper to set/clear/test bits
-static void bitmap_set(uint32_t bit) {
-  pfa_bitmap[bit / BITS_PER_BYTE] |= (1 << (bit % BITS_PER_BYTE));
-}
-
-static void bitmap_clear(uint32_t bit) {
-  pfa_bitmap[bit / BITS_PER_BYTE] &= ~(1 << (bit % BITS_PER_BYTE));
-}
-
-static int bitmap_test(uint32_t bit) {
-  return pfa_bitmap[bit / BITS_PER_BYTE] & (1 << (bit % BITS_PER_BYTE));
-}
-
-// ============= Bitmap Helper Functions =============
-static void bitmap_mark_range_used(uint32_t start_frame, uint32_t num_frames) {
-  for (uint32_t i = 0; i < num_frames && (start_frame + i) < total_frames;
-       i++) {
-    bitmap_set(start_frame + i);
-  }
-}
-
-static void bitmap_mark_range_free(uint32_t start_frame, uint32_t num_frames) {
-  for (uint32_t i = 0; i < num_frames && (start_frame + i) < total_frames;
-       i++) {
-    bitmap_clear(start_frame + i);
-  }
-}
 // ============= PFA Initialization Steps =============
 
 // Step 1: Initialize bitmap with all memory marked as used
 static void pfa_init_bitmap(uint32_t num_frames) {
-  bitmap_size = (num_frames + BITS_PER_BYTE - 1) / BITS_PER_BYTE;
-  pfa_bitmap = (uint8_t *)&physical_bitmap;
+  vm_bitmap.bitmap_size = (num_frames + BITS_PER_BYTE - 1) / BITS_PER_BYTE;
+  vm_bitmap.bitmap = (uint8_t *)&physical_bitmap;
 
   // Initially mark everything as used (safer default)
-  memset(pfa_bitmap, 0xFF, bitmap_size);
+  memset(vm_bitmap.bitmap, 0xFF, vm_bitmap.bitmap_size);
 
   printf("PFA: Initialized bitmap for %u frames (%u KB bitmap)\n", num_frames,
-         bitmap_size / 1024);
+         vm_bitmap.bitmap_size / 1024);
 }
 
 // Step 2: Mark usable memory regions as free based on memory map
@@ -89,7 +60,7 @@ static void pfa_mark_usable_memory(multiboot_info_t *mbi) {
         uint32_t start_frame = base / PAGE_SIZE;
         uint32_t num_frames = length / PAGE_SIZE;
 
-        bitmap_mark_range_free(start_frame, num_frames);
+        bitmap_mark_range_free(vm_bitmap, start_frame, num_frames);
         usable_regions++;
 
         printf("  - Marked free: frames %u-%u (0x%x-0x%x)\n", start_frame,
@@ -107,33 +78,39 @@ static void pfa_mark_usable_memory(multiboot_info_t *mbi) {
 
 // Step 3: Mark critical system areas as used
 static void pfa_reserve_system_areas(void) {
-  printf("PFA: Reserving system areas...\n");
+  if (PRINT_MEMORY_MAP)
+    printf("PFA: Reserving system areas...\n");
 
   // 1. Reserve NULL page (frame 0) - catch null pointer dereferences
-  bitmap_set(0);
-  printf("  - Reserved: Frame 0 (NULL guard page)\n");
+  bitmap_set(vm_bitmap.bitmap, 0);
+  if (PRINT_MEMORY_MAP)
+    printf("  - Reserved: Frame 0 (NULL guard page)\n");
 
   // 2. Reserve BIOS data area (0x400-0x4FF)
-  bitmap_set(0); // Frame 0 covers 0x0-0xFFF
-  printf("  - Reserved: BIOS IVT and data area\n");
+  bitmap_set(vm_bitmap.bitmap, 0); // Frame 0 covers 0x0-0xFFF
+  if (PRINT_MEMORY_MAP)
+    printf("  - Reserved: BIOS IVT and data area\n");
 
   // 3. Reserve EBDA (typically at 0x9FC00 or 0x80000)
   // Usually already marked as reserved in memory map, but be explicit
-  uint32_t ebda_frame = 0x9F000 / PAGE_SIZE; // Typical EBDA location
-  bitmap_mark_range_used(ebda_frame, 16);    // Reserve 64KB to be safe
-  printf("  - Reserved: Extended BIOS Data Area\n");
+  uint32_t ebda_frame = 0x9F000 / PAGE_SIZE;         // Typical EBDA location
+  bitmap_mark_range_used(vm_bitmap, ebda_frame, 16); // Reserve 64KB to be safe
+  if (PRINT_MEMORY_MAP)
+    printf("  - Reserved: Extended BIOS Data Area\n");
 
   // 4. Reserve VGA memory (0xA0000-0xBFFFF)
   uint32_t vga_start = 0xA0000 / PAGE_SIZE;
   uint32_t vga_frames = 0x20000 / PAGE_SIZE; // 128KB
-  bitmap_mark_range_used(vga_start, vga_frames);
-  printf("  - Reserved: VGA memory (0xA0000-0xBFFFF)\n");
+  bitmap_mark_range_used(vm_bitmap, vga_start, vga_frames);
+  if (PRINT_MEMORY_MAP)
+    printf("  - Reserved: VGA memory (0xA0000-0xBFFFF)\n");
 
   // 5. Reserve ROM area (0xC0000-0xFFFFF)
   uint32_t rom_start = 0xC0000 / PAGE_SIZE;
   uint32_t rom_frames = 0x40000 / PAGE_SIZE; // 256KB
-  bitmap_mark_range_used(rom_start, rom_frames);
-  printf("  - Reserved: BIOS ROM area (0xC0000-0xFFFFF)\n");
+  bitmap_mark_range_used(vm_bitmap, rom_start, rom_frames);
+  if (PRINT_MEMORY_MAP)
+    printf("  - Reserved: BIOS ROM area (0xC0000-0xFFFFF)\n");
 }
 
 // Step 4: Mark kernel memory as used
@@ -149,7 +126,7 @@ static void pfa_reserve_kernel_memory(void) {
   uint32_t end_frame = (reserved_end + PAGE_SIZE - 1) / PAGE_SIZE;
   uint32_t num_frames = end_frame - start_frame;
 
-  bitmap_mark_range_used(start_frame, num_frames);
+  bitmap_mark_range_used(vm_bitmap, start_frame, num_frames);
 
   printf("PFA: Reserved kernel memory:\n");
   printf("  - Physical: 0x%x-0x%x\n", kernel_start, reserved_end);
@@ -163,13 +140,13 @@ static void pfa_reserve_multiboot_structures(multiboot_info_t *mbi) {
 
   // 1. Reserve the multiboot info structure itself
   uint32_t mbi_frame = ((uintptr_t)mbi) / PAGE_SIZE;
-  bitmap_set(mbi_frame);
+  bitmap_set(vm_bitmap.bitmap, mbi_frame);
 
   // 2. Reserve memory map area
   if (mbi->flags & MULTIBOOT_INFO_MEM_MAP) {
     uint32_t mmap_start_frame = mbi->mmap_addr / PAGE_SIZE;
     uint32_t mmap_pages = (mbi->mmap_length + PAGE_SIZE - 1) / PAGE_SIZE;
-    bitmap_mark_range_used(mmap_start_frame, mmap_pages);
+    bitmap_mark_range_used(vm_bitmap, mmap_start_frame, mmap_pages);
   }
 
   // 3. Reserve modules if any
@@ -178,7 +155,8 @@ static void pfa_reserve_multiboot_structures(multiboot_info_t *mbi) {
     for (uint32_t i = 0; i < mbi->mods_count; i++) {
       uint32_t mod_start_frame = mod[i].mod_start / PAGE_SIZE;
       uint32_t mod_end_frame = (mod[i].mod_end + PAGE_SIZE - 1) / PAGE_SIZE;
-      bitmap_mark_range_used(mod_start_frame, mod_end_frame - mod_start_frame);
+      bitmap_mark_range_used(vm_bitmap, mod_start_frame,
+                             mod_end_frame - mod_start_frame);
       printf("  - Reserved module %u: frames %u-%u\n", i, mod_start_frame,
              mod_end_frame - 1);
     }
@@ -187,7 +165,7 @@ static void pfa_reserve_multiboot_structures(multiboot_info_t *mbi) {
   // 4. Reserve command line if present
   if (mbi->flags & MULTIBOOT_INFO_CMDLINE) {
     uint32_t cmdline_frame = mbi->cmdline / PAGE_SIZE;
-    bitmap_set(cmdline_frame);
+    bitmap_set(vm_bitmap.bitmap, cmdline_frame);
   }
 }
 
@@ -195,11 +173,11 @@ static void pfa_reserve_multiboot_structures(multiboot_info_t *mbi) {
 static uint32_t pfa_count_free_frames(void) {
   uint32_t free_count = 0;
 
-  for (uint32_t i = 0; i < total_frames; i++) {
+  for (uint32_t i = 0; i < vm_bitmap.total_frames; i++) {
     uint32_t byte_idx = i / 8;
     uint32_t bit_idx = i % 8;
 
-    if ((pfa_bitmap[byte_idx] & (1 << bit_idx)) == 0) {
+    if ((vm_bitmap.bitmap[byte_idx] & (1 << bit_idx)) == 0) {
       free_count++;
     }
   }
@@ -212,14 +190,14 @@ void init_pfa(multiboot_info_t *mbi) {
   // printf("\n=== Initializing Page Frame Allocator ===\n");
 
   // Step 1: Parse memory map and determine total frames
-  total_frames = get_max_usable_pages(mbi);
-  if (total_frames == 0) {
+  vm_bitmap.total_frames = get_max_usable_pages(mbi);
+  if (vm_bitmap.total_frames == 0) {
     printf("PFA: No usable memory found!\n");
     return;
   }
 
   // Step 2: Initialize bitmap (all marked as used initially)
-  pfa_init_bitmap(total_frames);
+  pfa_init_bitmap(vm_bitmap.total_frames);
 
   // Step 3: Mark usable memory regions as free
   pfa_mark_usable_memory(mbi);
@@ -234,17 +212,18 @@ void init_pfa(multiboot_info_t *mbi) {
   pfa_reserve_multiboot_structures(mbi);
 
   // Step 7: Calculate and display statistics
-  free_frames = pfa_count_free_frames();
-  uint32_t used_frames = total_frames - free_frames;
+  vm_bitmap.free_frames = pfa_count_free_frames();
+  uint32_t used_frames = vm_bitmap.total_frames - vm_bitmap.free_frames;
 
   // printf("\n=== PFA Initialization Complete ===\n");
-  // printf("Total frames: %u (%u MB)\n", total_frames, (total_frames * 4) /
-  // 1024); printf("Free frames:  %u (%u MB)\n", free_frames, (free_frames * 4)
-  // / 1024); printf("Used frames:  %u (%u MB)\n", used_frames, (used_frames *
-  // 4) / 1024); printf("Bitmap size:  %u bytes\n", bitmap_size);
+  // printf("Total frames: %u (%u MB)\n", vm_bitmap.vm_bitmap.total_frames,
+  // (vm_bitmap.vm_bitmap.total_frames * 4) / 1024); printf("Free frames:  %u
+  // (%u MB)\n", free_frames, (free_frames * 4) / 1024); printf("Used frames: %u
+  // (%u MB)\n", used_frames, (used_frames * 4) / 1024); printf("Bitmap size: %u
+  // bytes\n", vm_bitmap.bitmap_size);
 
   // Sanity check
-  if (free_frames == 0) {
+  if (vm_bitmap.free_frames == 0) {
     printf("PFA: No free frames available after initialization!\n");
   }
 
@@ -252,19 +231,19 @@ void init_pfa(multiboot_info_t *mbi) {
 }
 
 uintptr_t pfa_alloc() {
-  for (uint32_t byte = 0; byte < bitmap_size; byte++) {
-    if (pfa_bitmap[byte] !=
+  for (uint32_t byte = 0; byte < vm_bitmap.bitmap_size; byte++) {
+    if (vm_bitmap.bitmap[byte] !=
         0xFF) { // There is at least one free bit in this byte
       for (uint8_t bit = 0; bit < BITS_PER_BYTE; bit++) {
         uint8_t test_bit = 1 << bit;
         // Check if this bit is free (== 0)
-        if ((pfa_bitmap[byte] & test_bit) == 0) {
+        if ((vm_bitmap.bitmap[byte] & test_bit) == 0) {
           // Mark as used
-          pfa_bitmap[byte] |= test_bit;
+          vm_bitmap.bitmap[byte] |= test_bit;
           uint32_t frame_num = (byte * BITS_PER_BYTE) + bit;
           uintptr_t phys_addr = frame_num * PAGE_SIZE;
           // Make sure we don't go past the max allowed physical address
-          if (phys_addr >= max_phys_addr)
+          if (phys_addr >= vm_bitmap.max_phys_addr)
             return 0; // Out of physical memory
 
           // can't return frame 0, 0 is considered error code here
@@ -278,11 +257,11 @@ uintptr_t pfa_alloc() {
 }
 
 void pfa_free(uintptr_t phys_addr) {
-  if (phys_addr == 0 || phys_addr >= max_phys_addr)
+  if (phys_addr == 0 || phys_addr >= vm_bitmap.max_phys_addr)
     return;
   uint32_t frame_num = phys_addr / PAGE_SIZE;
-  if (bitmap_test(frame_num)) {
-    bitmap_clear(frame_num);
+  if (bitmap_test(vm_bitmap.bitmap, frame_num)) {
+    bitmap_clear(vm_bitmap.bitmap, frame_num);
   }
 }
 
@@ -298,8 +277,11 @@ static void temp_unmap() {
   asm volatile("invlpg %0" : : "m"(*(char *)TEMP_MAP_ADDR));
 }
 
-// Example: Alloc and add a new PT to PDE 'index' (e.g., 769 for next 4MB)
-void alloc_new_pt(uint32_t pde_index) {
+// new page table for the virtual range starting at (pde_index * 4MB)
+// function allocates a new page table (PT) in physical memory, initializes it,
+// and links it into the current page directory (the global page_directory
+// array) at a specific index
+void alloc_new_pt(uint32_t *page_directory, uint32_t pde_index) {
   uintptr_t pt_phys = pfa_alloc();
   if (pt_phys == 0) {
     printf("OOM: Can't alloc new PT\n");
@@ -308,16 +290,17 @@ void alloc_new_pt(uint32_t pde_index) {
 
   temp_map(pt_phys); // Map temporarily
   uint32_t *new_pt = (uint32_t *)TEMP_MAP_ADDR;
-  memset(new_pt, 0, PAGE_SIZE); // Zero the new PT
+  // Zero the new PT, ensures all PTEs start invalid (not mapping anything)
+  memset(new_pt, 0, PAGE_SIZE);
 
-  // Optional: Fill some entries (e.g., identity map or kernel mappings)
-  // for (int i = 0; i < 1024; i++) new_pt[i] = (some_phys + i*PAGE_SIZE) | 3;
+  // Writes the physical address of the new PT into the specified PDE index in
+  // the current page directory
+  page_directory[pde_index] = (uint32_t)pt_phys | 3;
+  // sets the present (bit 0) and read/write (bit 1) flags
+  // You might add User flag (bit 2) for user-mode access
 
-  page_directory[pde_index] = (uint32_t)pt_phys | 3; // Link to PDT
-  asm volatile("mov %%cr3, %%eax; mov %%eax, %%cr3"
-               :
-               :
-               : "eax"); // Full TLB flush
+  // full TLB flush, temporary due to inefficiency
+  asm volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" : : : "eax");
 
   temp_unmap(); // Clean up
   printf("New PT allocated at phys %p, mapped to PDE %u\n", pt_phys, pde_index);
