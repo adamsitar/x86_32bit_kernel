@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include <util.h>
+#include <util/util.h>
 
 // packed struct for a single GDT entry (8 bytes)
 struct gdt_entry {

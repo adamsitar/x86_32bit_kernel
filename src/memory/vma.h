@@ -1,8 +1,8 @@
 #pragma once
-#include "util.h"
-#include <bitmap.h>
-#include <pfa.h>
+#include <memory/pfa.h>
 #include <stdint.h>
+#include <util/bitmap.h>
+#include <util/util.h>
 
 #define PD_BASE_VADDR 0xFFC00000
 #define GET_PT(pde_index) (PD_BASE_VADDR + (pde_index << 12))

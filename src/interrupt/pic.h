@@ -1,6 +1,6 @@
 #pragma once
-#include <io.h>
 #include <stdint.h>
+#include <util/io.h>
 
 // By default, the PIC sends these interrupts to vectors 0-15, which conflict
 // with CPU exceptions (also 0-31). So we need to remap the PIC to use different

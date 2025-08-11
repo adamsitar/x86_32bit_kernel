@@ -1,8 +1,8 @@
 #pragma once
-#include <printf.h>
 #include <stdbool.h>
 #include <stddef.h> // For size_t
 #include <stdint.h> // For uint32_t, uintptr_t
+#include <util/printf.h>
 
 #define PDE_COUNT 1024 // Fixed for 32-bit x86
 

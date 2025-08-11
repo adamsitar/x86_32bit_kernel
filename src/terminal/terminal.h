@@ -1,11 +1,11 @@
 #pragma once
-#include "printf.h"
-#include <io.h>
+#include "util/printf.h"
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <util.h>
-#include <vga.h>
+#include <terminal/vga.h>
+#include <util/io.h>
+#include <util/util.h>
 
 // Scrollback buffer configuration
 #define SCROLLBACK_LINES 100 // Number of lines to keep in history

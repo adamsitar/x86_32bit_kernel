@@ -1,4 +1,4 @@
-#include <interrupt.h>
+#include <interrupt/interrupt.h>
 
 enum IRQ { DOUBLE_FAULT = 8, PAGE_FAULT = 14, TIMER = 32, KEYBOARD = 33 };
 

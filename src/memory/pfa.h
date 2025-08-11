@@ -1,10 +1,10 @@
 #pragma once
-#include <bitmap.h>
+#include <memory/pfa_helpers.h>
 #include <multiboot_gnu.h>
-#include <pfa_helpers.h>
-#include <printf.h>
 #include <stdint.h>
-#include <util.h>
+#include <util/bitmap.h>
+#include <util/printf.h>
+#include <util/util.h>
 
 #define PAGE_SIZE 4096
 #define TEMP_MAP_ADDR                                                          \

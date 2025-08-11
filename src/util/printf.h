@@ -1,5 +1,5 @@
 #pragma once
-#include <terminal.h>
+#include <terminal/terminal.h>
 
 /* Helper to print a signed integer. */
 static inline void print_int(int num) {

@@ -1,11 +1,11 @@
 #pragma once
-#include <io.h>
-#include <keyboard.h>
-#include <pic.h>
+#include <interrupt/pic.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <terminal.h>
-#include <util.h>
+#include <terminal/keyboard.h>
+#include <terminal/terminal.h>
+#include <util/io.h>
+#include <util/util.h>
 
 #define IDT_MAX_DESCRIPTORS 256
 

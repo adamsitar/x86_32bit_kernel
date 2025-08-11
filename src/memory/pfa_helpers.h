@@ -1,8 +1,8 @@
 #pragma once
-#include "bitmap.h"
 #include "multiboot_gnu.h"
-#include <printf.h>
+#include "util/bitmap.h"
 #include <stdint.h>
+#include <util/printf.h>
 
 #define PAGE_SIZE 4096
 

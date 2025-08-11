@@ -1,7 +1,7 @@
 #pragma once
 #include <multiboot_gnu.h>
-#include <printf.h>
 #include <stdint.h>
+#include <util/printf.h>
 
 // Typedef for a function pointer that takes no arguments and returns void
 // This matches the book's suggestion: it's how we "cast" the module's address

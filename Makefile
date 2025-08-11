@@ -1,11 +1,9 @@
-# Makefile for building a bare-metal kernel
-
 # Directories
 SRC_DIR := src
-ASM_DIR := $(SRC_DIR)/asm
+# ASM_DIR := $(SRC_DIR)/asm
 BIN_DIR := bin
 ISO_DIR := $(BIN_DIR)/isodir
-PROGRAM_DIR := $(ASM_DIR)/programs
+PROGRAM_DIR := $(SRC_DIR)/programs
 PROGRAM_BIN_DIR := $(BIN_DIR)/programs
 
 # Compilers and tools
@@ -16,26 +14,29 @@ GRUB_MKRESCUE := grub-mkrescue
 QEMU := qemu-system-i386
 
 # Flags
-NASM_FLAGS := -felf32 -I$(ASM_DIR) -I$(SRC_DIR)
-CFLAGS := -std=gnu99 -ffreestanding -g -Wall -Wextra -I$(SRC_DIR) -I$(ASM_DIR)
+NASM_FLAGS := -felf32 -I$(SRC_DIR)
+CFLAGS := -std=gnu99 -ffreestanding -g -Wall -Wextra -I$(SRC_DIR)
 LDFLAGS := -m elf_i386 -T linker.ld
 QEMU_FLAGS := -no-reboot -no-shutdown -d int,guest_errors,invalid_mem
 
 # Source files (using wildcard to automatically find all .asm and .c files)
 # This uses Make's wildcard function to glob files dynamically.
-ASM_SOURCES := $(wildcard $(ASM_DIR)/*.nasm)
-C_SOURCES := $(wildcard $(SRC_DIR)/*.c)
+C_SOURCES := $(shell find $(SRC_DIR) -type f -name '*.c')
+ASM_SOURCES := $(shell find $(SRC_DIR) -type f -name '*.nasm' -not -path '$(PROGRAM_DIR)/*')
+PROGRAM_SOURCES := $(shell find $(PROGRAM_DIR) -type f -name '*.nasm')
+
+# ASM_SOURCES := $(wildcard $(ASM_DIR)/*.nasm)
+# C_SOURCES := $(wildcard $(SRC_DIR)/*.c)
 
 # Find all program source files
 PROGRAM_SOURCES := $(wildcard $(PROGRAM_DIR)/*.nasm)
 # Convert to .bin targets
-PROGRAM_BINS := $(patsubst $(PROGRAM_DIR)/%.nasm,$(BIN_DIR)/programs/%.bin,$(PROGRAM_SOURCES))
+PROGRAM_BINS := $(patsubst $(PROGRAM_DIR)/%.nasm, $(PROGRAM_BIN_DIR)/%.bin, $(PROGRAM_SOURCES))
 
 # Object files (using patsubst to transform source paths to bin/ paths)
 # patsubst is a substitution function: $(patsubst pattern, replacement, text)
-ASM_OBJECTS := $(patsubst $(ASM_DIR)/%.nasm, $(BIN_DIR)/%.o, $(ASM_SOURCES))
+ASM_OBJECTS := $(patsubst $(SRC_DIR)/%.nasm, $(BIN_DIR)/%.o, $(ASM_SOURCES))
 C_OBJECTS := $(patsubst $(SRC_DIR)/%.c, $(BIN_DIR)/%.o, $(C_SOURCES))
-
 # All objects combined
 OBJECTS := $(ASM_OBJECTS) $(C_OBJECTS)
 
@@ -44,21 +45,25 @@ all: clean run
 # Rule to link all objects into bin/os.bin
 # $@ is an automatic variable for the target name.
 # $^ is an automatic variable for all prerequisites (no duplicates).
-$(BIN_DIR)/os.bin: $(OBJECTS) | $(BIN_DIR)
-	echo $(OBJECTS)
+$(BIN_DIR)/os.bin: $(OBJECTS)
+	# echo $(OBJECTS)
+	mkdir -p $(@D)
 	$(LD) $(LDFLAGS) -o $@ $^
 
 # Pattern rule for compiling ASM files
 # % is a wildcard in pattern rules; $< is the first prerequisite (source file),
 # $@ is the target (object file).
-$(BIN_DIR)/%.o: $(ASM_DIR)/%.nasm | $(BIN_DIR)
+$(BIN_DIR)/%.o: $(SRC_DIR)/%.nasm
+	mkdir -p $(@D)
 	$(NASM) $(NASM_FLAGS) $< -o $@
 
 $(PROGRAM_BIN_DIR)/%.bin: $(PROGRAM_DIR)/%.nasm | $(PROGRAM_BIN_DIR)
+	mkdir -p $(@D)
 	$(NASM) -f bin $< -o $@
 
 # Pattern rule for compiling C files
-$(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
+$(BIN_DIR)/%.o: $(SRC_DIR)/%.c
+	mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Rule to create the ISO
@@ -68,7 +73,7 @@ iso: $(BIN_DIR)/os.bin grub.cfg $(PROGRAM_BINS)
 	mkdir -p $(ISO_DIR)/boot/grub
 	mkdir -p $(ISO_DIR)/modules
 	cp $(BIN_DIR)/os.bin $(ISO_DIR)/boot/os.bin
-	cp $(PROGRAM_BIN_DIR)/program.bin $(ISO_DIR)/modules/program.bin
+	cp -r $(PROGRAM_BIN_DIR)/. $(ISO_DIR)/modules/
 	cp grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	$(GRUB_MKRESCUE) -o $(BIN_DIR)/os.iso $(ISO_DIR)
 
@@ -80,11 +85,6 @@ run: iso
 debug: iso
 	$(QEMU) $(QEMU_FLAGS) -cdrom $(BIN_DIR)/os.iso -s -S
 	# $(QEMU) $(QEMU_FLAGS) -kernel $(BIN_DIR)/os.bin -s -S
-
-# Create bin/ directory if it doesn't exist (order-only prerequisite, using |)
-# Order-only prerequisites (with |) are not checked for timestamps, just ensured to exist.
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)
 
 $(PROGRAM_BIN_DIR): 
 	mkdir -p $(PROGRAM_BIN_DIR)

@@ -1,7 +1,7 @@
-#include <io.h>
-#include <printf.h>
-#include <scancodes.h>
 #include <stdbool.h>
+#include <terminal/scancodes.h>
+#include <util/io.h>
+#include <util/printf.h>
 
 #define KBD_DATA_PORT 0x60
 /** read_scan_code:
