@@ -2,6 +2,7 @@
 #include <multiboot_gnu.h>
 #include <printf.h>
 #include <stdint.h>
+
 // Typedef for a function pointer that takes no arguments and returns void
 // This matches the book's suggestion: it's how we "cast" the module's address
 // to something callable
@@ -14,27 +15,6 @@ void halt() {
                             // assembly hang loop)
   while (1) {
   } // Infinite loop to ensure we never proceed
-}
-
-void clear_identity_mapping() {
-  extern uint32_t page_directory[1024];
-  extern uint32_t page_table[1024];
-
-  // Step 1: Clear PDE 0 (identity mapping).
-  // page_directory is at high virtual address.
-  page_directory[0] = 0; // Set to 0 (not present, no flags).
-
-  // Step 2: Invalidate TLB.
-  // Option A: Full TLB flush by reloading CR3 (simple).
-  unsigned int cr3_val;
-  asm volatile("mov %%cr3, %0" : "=r"(cr3_val));  // Read CR3
-  asm volatile("mov %0, %%cr3" : : "r"(cr3_val)); // Write back to flush TLB.
-}
-
-void test_identity_clear() {
-  // (Optional) Step 3: Verify - this should cause a page fault.
-  volatile unsigned int *test = (unsigned int *)0x00000000;
-  *test = 0xDEADBEEF; // Will fault if identity mapping is removed.
 }
 
 void start_module(multiboot_info_t *mbi) {

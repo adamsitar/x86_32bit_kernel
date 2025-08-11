@@ -1,3 +1,4 @@
 bin
 bochslog.txt
 .cache
+.gdb_history

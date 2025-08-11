@@ -8,6 +8,14 @@
 
 extern uint32_t page_directory[1024];
 
+// Enable recursive mapping (do this once, after PD is initialized)
+void setup_recursive_pd() {
+  // Set last PDE to point to PD itself (Present + R/W)
+  page_directory[1023] = page_directory[0] | 3; // 3 = 0b11 (Present + Write)
+  // Flush TLB to apply changes
+  asm volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" : : : "eax");
+}
+
 typedef struct {
   uint32_t start;
   uint32_t end;

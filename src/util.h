@@ -18,7 +18,7 @@ void *memcpy(void *destination, const void *source, uint32_t num_bytes) {
   return destination;
 }
 
-void invalidate(uint32_t virtual_address) {
+void invlpg(uint32_t virtual_address) {
   asm volatile("invlpg %0" ::"m"(virtual_address));
 }
 
