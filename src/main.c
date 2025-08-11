@@ -5,6 +5,7 @@
 #include <memory/memory.h>
 #include <memory/pfa.h>
 #include <memory/vma.h>
+#include <module.h>
 #include <terminal/terminal.h>
 #include <util/io.h>
 // standard
@@ -19,13 +20,8 @@ void kernel_main(uint32_t magic, multiboot_info_t *boot_info) {
   init_pfa(boot_info); // Call our initializer
   setup_recursive_pd();
 
-  // PDE 0 and PDE 768 are filled in boot
-  // scan_pde_for_free(page_directory, true);
-  // alloc_new_pt(page_directory, 767); // 768 causes a page fault
-  uint32_t virt_addr = vma_alloc(page_directory, 3 * 1024 * 1024, 0xC020000, 0);
-  printf("virtual addr: 0x%x\n", virt_addr);
   scan_pde_for_free(page_directory, true);
-  vma_free(page_directory, virt_addr, 5 * 1024 * 1024);
+  vma_alloc(page_directory, 2 * 1024 * 1024, NULL, 0);
   scan_pde_for_free(page_directory, true);
 
   // test_software_interrupt();

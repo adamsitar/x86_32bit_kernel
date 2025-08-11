@@ -1,4 +1,5 @@
 #pragma once
+#include "memory/memory.h"
 #include <memory/pfa.h>
 #include <stdint.h>
 #include <util/bitmap.h>
@@ -63,8 +64,8 @@ uintptr_t vma_alloc(uint32_t *pd, size_t bytes, uintptr_t hint,
   // TODO Store flags somewhere (e.g., in a separate VMA list for advanced
   // tracking)
 
-  printf("VMA: Allocated %u pages at virt %p (hint %p, flags %x)\n", num_pages,
-         virt_start, hint, flags);
+  printf("VMA: Allocated %u pages (%u kb) at virt %p (hint %p, flags %x)\n",
+         num_pages, B_TO_KB((num_pages * PAGE_SIZE)), virt_start, hint, flags);
   return virt_start;
 }
 

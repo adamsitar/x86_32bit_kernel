@@ -1,16 +1,11 @@
 #pragma once
+#include <memory/memory.h>
+#include <memory/multiboot_gnu.h>
 #include <memory/pfa_helpers.h>
-#include <multiboot_gnu.h>
 #include <stdint.h>
 #include <util/bitmap.h>
 #include <util/printf.h>
 #include <util/util.h>
-
-#define PAGE_SIZE 4096
-#define TEMP_MAP_ADDR                                                          \
-  0xC03FF000 // As per book: Last entry in kernel's first PT (PDE 768, PTE 1023)
-// #define TEMP_MAP_ADDR_BITSHIFT (768 << 22) | (1023 << 12) | 0x000
-#define BITS_PER_BYTE 8
 
 // Access boot.nasm structures
 extern uint32_t page_directory[1024];
@@ -303,5 +298,6 @@ void alloc_new_pt(uint32_t *page_directory, uint32_t pde_index) {
   asm volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" : : : "eax");
 
   temp_unmap(); // Clean up
-  printf("New PT allocated at phys %p, mapped to PDE %u\n", pt_phys, pde_index);
+  printf("PFA: New PT allocated at phys %p, mapped to PDE %u\n", pt_phys,
+         pde_index);
 }

@@ -6,12 +6,6 @@
 
 #define PAGE_SIZE 4096
 
-// extern uint8_t *vm_bitmap.bitmap;
-// extern uint32_t vm_bitmap.bitmap_size;
-// extern uint32_t vm_bitmap.vm_bitmap.total_frames;
-// extern uint32_t free_frames;
-// extern uintptr_t max_phys_addr;
-
 extern vm_bitmap_t vm_bitmap;
 
 // Get human-readable memory type string

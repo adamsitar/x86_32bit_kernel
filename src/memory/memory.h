@@ -6,6 +6,16 @@
 
 #define PDE_COUNT 1024 // Fixed for 32-bit x86
 
+#define PAGE_SIZE 4096
+#define TEMP_MAP_ADDR                                                          \
+  0xC03FF000 // As per book: Last entry in kernel's first PT (PDE 768, PTE 1023)
+// #define TEMP_MAP_ADDR_BITSHIFT (768 << 22) | (1023 << 12) | 0x000
+#define BITS_PER_BYTE 8
+
+#define B_TO_KB(num) ((unsigned long long)(num) / (1ULL << 10))
+#define B_TO_MB(num) ((unsigned long long)(num) / (1ULL << 20))
+#define B_TO_GB(num) ((unsigned long long)(num) / (1ULL << 30))
+
 extern uint32_t page_directory[1024];
 
 // Enable recursive mapping (do this once, after PD is initialized)
@@ -142,11 +152,11 @@ int scan_pde_for_free(const uint32_t *pd, bool print_summary) {
     print_pde_summary(pd);
   }
 
-  if (first_free == -1) {
-    printf("Warning: No free PDEs found\n");
-  } else {
-    printf("First free PDE index: %d\n", first_free);
-  }
+  // if (first_free == -1) {
+  //   printf("Warning: No free PDEs found\n");
+  // } else {
+  //   printf("First free PDE index: %d\n", first_free);
+  // }
 
   return first_free;
 }
